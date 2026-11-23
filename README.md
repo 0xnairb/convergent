@@ -90,6 +90,23 @@ Captured from an actual end-to-end execution of `uv run python ../examples/demo_
 | Exact source citation on v2 block | `source_uri: policy://travel-policy-401de8.md`, `offset: 0`, `length: 152`, `quote_hash: f446b6507ec9f626` | Content-addressed provenance |
 | Historical `as_of=<t_v1>` query recovers v1 | **`true`** (`superseded_by: f2c8464d-a3a9-4d00-ba89-c57c70154a55`) | Full auditability without polluting active context |
 
+### Semantic Supersession Benchmark (Standard RAG vs. Project Convergent)
+
+Run the 12-scenario cross-document contradiction & additive-control benchmark ([benchmarks/semantic_supersession_bench.py](benchmarks/semantic_supersession_bench.py)) on local Ollama (`granite4.2:3b`):
+
+```bash
+cd worker-py && uv run python ../benchmarks/semantic_supersession_bench.py
+```
+
+Observed results (`granite4.2:3b`, `40.21s`, 8 cross-URI contradictions + 4 additive false-positive controls):
+
+| Metric | Standard RAG (No Semantic Supersession) | Project Convergent (`CONVERGENT_SEMANTIC_INGEST=1`) |
+|---|---|---|
+| Cross-Document Contradiction Recall (different `source_uri`) | `0/8 (0.0%)` | **`8/8 (100.0%)`** |
+| False-Positive Supersession Rate (additive controls) | N/A | **`0/4 (0.0%)`** |
+| Old Superseded Block Retrieved in Active Context | **`8/8 (100.0%)`** | **`0/8 (0.0%)`** *(all 8 old blocks marked `valid_to`)* |
+| Example Failure Prevented (`infra://primary-region.md` vs `incident://postmortem-42-migration.md`) | Hallucinated stale **`us-east-1`** | Answered **`eu-central-1`** |
+
 ## Running Tests
 
 ```bash

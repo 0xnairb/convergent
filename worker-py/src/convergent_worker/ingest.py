@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 import uuid
 
@@ -11,6 +12,7 @@ import psycopg
 import redis
 
 from .memory import IngestResult, ingest_document
+from .semantic import classify_relationship_llm, extract_claims_llm, ingest_document_semantic
 
 
 def resolve_openfga_store_id(http: httpx.Client, openfga_url: str, store_name: str = "convergent") -> str:
@@ -72,15 +74,43 @@ def process_ingest_payload(
     clearance_scope = str(payload.get("clearance_scope") or f"space:{space_id}")
     block_type = str(payload.get("block_type") or "fact")
 
-    result = ingest_document(
-        conn,
-        org_id=org_id,
-        space_id=space_id,
-        clearance_scope=clearance_scope,
-        source_uri=source_uri,
-        text=content,
-        block_type=block_type,
+    use_semantic = bool(payload.get("semantic")) or os.environ.get("CONVERGENT_SEMANTIC_INGEST", "").lower() in (
+        "1",
+        "true",
+        "yes",
     )
+    if use_semantic:
+        ollama_url = os.environ.get("CONVERGENT_VLLM_URL", "http://127.0.0.1:11434")
+        model_id = os.environ.get("CONVERGENT_MODEL_ID", "granite4.2:3b")
+        sem = ingest_document_semantic(
+            conn,
+            org_id=org_id,
+            space_id=space_id,
+            clearance_scope=clearance_scope,
+            source_uri=source_uri,
+            text=content,
+            extractor=lambda t: extract_claims_llm(http, ollama_url=ollama_url, model_id=model_id, text=t),
+            classifier=lambda old_c, new_c: classify_relationship_llm(
+                http, ollama_url=ollama_url, model_id=model_id, existing_claim=old_c, new_claim=new_c
+            ),
+            block_type="claim",
+        )
+        result = IngestResult(
+            document_id=sem.document_id,
+            block_ids=sem.block_ids,
+            superseded_block_ids=sem.superseded_block_ids,
+            content_blake3="",
+        )
+    else:
+        result = ingest_document(
+            conn,
+            org_id=org_id,
+            space_id=space_id,
+            clearance_scope=clearance_scope,
+            source_uri=source_uri,
+            text=content,
+            block_type=block_type,
+        )
     register_document_openfga(
         http,
         openfga_url,
