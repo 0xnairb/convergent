@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: paradedb/paradedb:latest-pg17
+    environment:
+      POSTGRES_USER: convergent
+      POSTGRES_PASSWORD: convergent_dev_password
+      POSTGRES_DB: convergent
+    ports:
+      - "55432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U convergent -d convergent"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "56379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-m", "8222"]
+    ports:
+      - "54222:4222"
+      - "58222:8222"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8222/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  openfga-migrate:
+    image: openfga/openfga:v1.8.5
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["migrate", "--datastore-engine", "postgres", "--datastore-uri", "postgres://convergent:convergent_dev_password@postgres:5432/convergent?sslmode=disable"]
+    restart: "no"
+
+  openfga:
+    image: openfga/openfga:v1.8.5
+    depends_on:
+      openfga-migrate:
+        condition: service_completed_successfully
+    command: ["run", "--datastore-engine", "postgres", "--datastore-uri", "postgres://convergent:convergent_dev_password@postgres:5432/convergent?sslmode=disable"]
+    ports:
+      - "58080:8080"
+      - "58081:8081"
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=:8081"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pg_data:

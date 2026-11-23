@@ -1,0 +1,32 @@
+[package]
+name = "convergent-gateway"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "json", "chrono"] }
+redis = { version = "0.29", features = ["tokio-comp"] }
+async-nats = "0.39"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+hmac = "0.12"
+sha2 = "0.10"
+blake3 = "1"
+hex = "0.4"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+jsonwebtoken = "9"
+base64 = "0.22"
+futures-util = "0.3"
+tokio-stream = "0.1"
+tower-http = { version = "0.6", features = ["trace", "cors"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "2"
+anyhow = "1"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
