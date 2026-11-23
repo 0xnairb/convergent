@@ -12,7 +12,7 @@ pub struct Config {
     pub master_seed: String,
     pub fallback_vllm_url: String,
     pub fallback_model_id: String,
-    pub openbox_url: Option<String>,
+    pub policy_webhook_url: Option<String>,
 }
 
 impl Config {
@@ -39,7 +39,7 @@ impl Config {
                 .unwrap_or_else(|_| "http://127.0.0.1:8000".into()),
             fallback_model_id: env::var("CONVERGENT_MODEL_ID")
                 .unwrap_or_else(|_| "Qwen/Qwen3-32B-FP8".into()),
-            openbox_url: env::var("CONVERGENT_OPENBOX_URL")
+            policy_webhook_url: env::var("CONVERGENT_POLICY_WEBHOOK_URL")
                 .ok()
                 .filter(|s| !s.trim().is_empty()),
         }

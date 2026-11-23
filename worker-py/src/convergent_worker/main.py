@@ -40,7 +40,7 @@ async def run_worker_loop(stop_event: asyncio.Event) -> None:
     js = nc.jetstream()
     valkey = redis.Redis.from_url(valkey_url, decode_responses=True)
 
-    with psycopg.connect(pg_dsn) as conn, httpx.Client(timeout=15.0) as http:
+    with psycopg.connect(pg_dsn, autocommit=True) as conn, httpx.Client(timeout=15.0) as http:
         store_id = resolve_openfga_store_id(http, openfga_url, openfga_store_name)
         log.info(
             "convergent-worker started (openfga_store=%s, vllm=%s, model=%s)",
@@ -56,6 +56,7 @@ async def run_worker_loop(stop_event: asyncio.Event) -> None:
                     http=http,
                     openfga_url=openfga_url,
                     openfga_store_id=store_id,
+                    valkey=valkey,
                 )
                 if ingested:
                     log.info("ingested %d document(s)", len(ingested))

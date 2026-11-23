@@ -8,6 +8,7 @@ import uuid
 
 import httpx
 import psycopg
+import redis
 
 from .memory import IngestResult, ingest_document
 
@@ -46,6 +47,15 @@ def register_document_openfga(
         resp.raise_for_status()
 
 
+def invalidate_acl_caches(valkey: redis.Redis | None, store_id: str) -> None:
+    """Clear short-TTL Valkey ACL caches after new document tuples are written."""
+    if valkey is None:
+        return
+    keys = list(valkey.scan_iter(match=f"cvg:acl:{store_id}:*"))
+    if keys:
+        valkey.delete(*keys)
+
+
 def process_ingest_payload(
     *,
     conn: psycopg.Connection,
@@ -53,6 +63,7 @@ def process_ingest_payload(
     openfga_url: str,
     openfga_store_id: str,
     payload: dict[str, Any],
+    valkey: redis.Redis | None = None,
 ) -> IngestResult:
     org_id = uuid.UUID(str(payload["org_id"]))
     space_id = uuid.UUID(str(payload["space_id"]))
@@ -78,6 +89,7 @@ def process_ingest_payload(
         space_id=space_id,
         org_id=org_id,
     )
+    invalidate_acl_caches(valkey, openfga_store_id)
     return result
 
 
@@ -88,14 +100,16 @@ async def drain_ingest_once(
     http: httpx.Client,
     openfga_url: str,
     openfga_store_id: str,
+    valkey: redis.Redis | None = None,
     durable_name: str = "convergent-ingest-worker",
     batch_size: int = 10,
+    fetch_timeout: float = 0.25,
 ) -> list[IngestResult]:
     """Consume pending `convergent.ingest.requested` messages, persist blocks, and register OpenFGA tuples."""
     sub = await js.pull_subscribe("convergent.ingest.requested", durable=durable_name)
     results: list[IngestResult] = []
     try:
-        msgs = await sub.fetch(batch_size, timeout=1.0)
+        msgs = await sub.fetch(batch_size, timeout=fetch_timeout)
     except TimeoutError:
         return results
     for msg in msgs:
@@ -106,6 +120,7 @@ async def drain_ingest_once(
             openfga_url=openfga_url,
             openfga_store_id=openfga_store_id,
             payload=payload,
+            valkey=valkey,
         )
         await msg.ack()
         results.append(res)

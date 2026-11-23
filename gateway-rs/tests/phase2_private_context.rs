@@ -110,7 +110,7 @@ async fn phase2_openfga_prefilter_revocation_hmac_and_ethical_walls() -> anyhow:
     assert_ne!(key_alpha, key_beta, "Different clearances must produce disjoint KV keys");
     assert_eq!(key_org_user1, key_org_user2, "Same org clearance must share warm KV keys");
 
-    // 2.2b: Opt-in OpenBox Ethical Walls webhook drops Withheld[] block before inference
+    // 2.2b: Opt-in Policy / Ethical Walls webhook drops Withheld[] block before inference
     let withheld_target = alpha_hash.clone();
     let app = Router::new().route(
         "/api/v1/governance/evaluate",

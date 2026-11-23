@@ -44,7 +44,7 @@ pub struct AppState {
     pub master_seed: Vec<u8>,
     pub fallback_vllm_url: String,
     pub fallback_model_id: String,
-    pub openbox_url: Option<String>,
+    pub policy_webhook_url: Option<String>,
     pub auth_codes: Arc<RwLock<HashMap<String, PkceAuthCode>>>,
 }
 
@@ -194,15 +194,15 @@ async fn chat_completions(
         }
     }
 
-    if let Some(ref openbox_url) = state.openbox_url {
-        match filter_withheld_blocks(&state.http, openbox_url, &claims.sub, blocks).await {
+    if let Some(ref policy_url) = state.policy_webhook_url {
+        match filter_withheld_blocks(&state.http, policy_url, &claims.sub, blocks).await {
             Ok((kept, _withheld)) => blocks = kept,
             Err(e) => return (StatusCode::FORBIDDEN, Json(json!({ "error": e.to_string() }))).into_response(),
         }
     }
 
     let active = get_active_model(&state.pool, &state.fallback_vllm_url, &state.fallback_model_id).await;
-    let (payload, _kv_keys) = build_blended_payload(body, &active.model_id, &state.master_seed, &blocks);
+    let (payload, kv_keys) = build_blended_payload(body, &active.model_id, &state.master_seed, &blocks);
     let proxy_overhead_ms = t0.elapsed().as_secs_f64() * 1000.0;
 
     let upstream = match forward_completion(&state.http, &active.endpoint_url, &payload).await {
@@ -215,10 +215,17 @@ async fn chat_completions(
         .get("content-type")
         .cloned()
         .unwrap_or_else(|| HeaderValue::from_static("application/json"));
+    let cache_hits_hdr = upstream.headers().get("x-convergent-dev-cache-hits").cloned();
 
     let stream = upstream.bytes_stream().map_err(std::io::Error::other);
     let mut resp = Response::new(Body::from_stream(stream));
     resp.headers_mut().insert("content-type", content_type);
+    if let Some(hits) = cache_hits_hdr {
+        resp.headers_mut().insert("x-convergent-cache-hits", hits);
+    }
+    if let Ok(hv) = HeaderValue::from_str(&kv_keys.len().to_string()) {
+        resp.headers_mut().insert("x-convergent-kv-blocks", hv);
+    }
     if let Ok(hv) = HeaderValue::from_str(&format!("{proxy_overhead_ms:.2}")) {
         resp.headers_mut().insert("x-convergent-proxy-overhead-ms", hv);
     }

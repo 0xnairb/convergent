@@ -4,7 +4,7 @@ Clean-slate **3-Layer Sovereign Cognitive Engine** for enterprises running open-
 
 ## Architecture
 - **Layer 1 · Smart Cache:** `vLLM` + `LMCache` (`CacheBlend`) tiered to `Valkey` + NATS-driven atomic KV eviction (`Valkey DEL`) & `max_tokens=1` prefill warming + zero-downtime `model_registry` cutover.
-- **Layer 2 · Smart Private Context:** Deterministic `OpenFGA` Zanzibar ReBAC pre-filtering + per-clearance `HMAC-SHA256` KV key isolation + opt-in OpenBox Ethical Walls (`Withheld[]`) webhook.
+- **Layer 2 · Smart Private Context:** Deterministic `OpenFGA` Zanzibar ReBAC pre-filtering + per-clearance `HMAC-SHA256` KV key isolation + opt-in Policy Ethical Walls (`Withheld[]`) webhook.
 - **Layer 3 · Smart Memory:** Single-ACID `PostgreSQL 17` (`pgvector` + `pg_search` BM25 + bi-temporal `valid_from`/`valid_to`/`superseded_by`) + `NATS JetStream` transactional outbox & Python (`uv`) workers.
 - **Hot Data Plane (`gateway-rs`):** Rust (`Axum`) serving **MCP Streamable HTTP (`/mcp`)** with **OAuth 2.1 + PKCE (`S256`)**, **OpenAI-compatible `/v1/chat/completions`** (JSON & SSE streaming), `/v1/spaces/{space_id}/grants`, and `/v1/memory/history`.
 
@@ -25,6 +25,14 @@ uv run convergent-worker
 
 # 5. Start the Rust gateway (in a third terminal)
 cd ../gateway-rs && cargo run
+```
+
+## Running the 3-Layer Live Sample & Integration Proof
+
+```bash
+# Boots the real Rust gateway binary, Python worker daemon, and local dev vLLM simulator
+# against live Postgres 17, Valkey 8, OpenFGA 1.8.5, and NATS JetStream:
+cd worker-py && uv run python ../examples/demo_three_layers.py
 ```
 
 ## Running Tests

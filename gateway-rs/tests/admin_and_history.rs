@@ -38,7 +38,7 @@ async fn admin_space_grants_and_bitemporal_memory_history() -> anyhow::Result<()
         master_seed: b"test-admin-seed".to_vec(),
         fallback_vllm_url: "http://127.0.0.1:8000".into(),
         fallback_model_id: "Qwen/Qwen3-32B-FP8".into(),
-        openbox_url: None,
+        policy_webhook_url: None,
         auth_codes: Arc::new(RwLock::new(HashMap::new())),
     };
     let app = build_router(state);

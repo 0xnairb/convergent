@@ -85,7 +85,7 @@ async fn phase4_oauth21_pkce_mcp_streamable_http_and_openai_sse() -> anyhow::Res
         master_seed: b"phase4-master-seed".to_vec(),
         fallback_vllm_url: format!("http://{vllm_addr}"),
         fallback_model_id: test_model.clone(),
-        openbox_url: None,
+        policy_webhook_url: None,
         auth_codes: Arc::new(RwLock::new(HashMap::new())),
     };
 

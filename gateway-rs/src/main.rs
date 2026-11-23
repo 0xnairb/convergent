@@ -34,7 +34,7 @@ async fn main() -> anyhow::Result<()> {
         master_seed: cfg.master_seed.into_bytes(),
         fallback_vllm_url: cfg.fallback_vllm_url,
         fallback_model_id: cfg.fallback_model_id,
-        openbox_url: cfg.openbox_url,
+        policy_webhook_url: cfg.policy_webhook_url,
         auth_codes: Arc::new(RwLock::new(HashMap::new())),
     };
 

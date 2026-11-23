@@ -147,12 +147,13 @@ async def drain_supersession_once(
     master_seed: bytes,
     durable_name: str = "convergent-kv-evictor",
     batch_size: int = 10,
+    fetch_timeout: float = 0.25,
 ) -> list[dict[str, Any]]:
     """Consume pending supersession events from NATS JetStream and ack only after Valkey DEL."""
     sub = await js.pull_subscribe("convergent.memory.superseded", durable=durable_name)
     results: list[dict[str, Any]] = []
     try:
-        msgs = await sub.fetch(batch_size, timeout=1.0)
+        msgs = await sub.fetch(batch_size, timeout=fetch_timeout)
     except TimeoutError:
         return results
     for msg in msgs:

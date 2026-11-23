@@ -24,11 +24,11 @@ struct EvaluateResp {
     withheld_handles: Vec<String>,
 }
 
-/// Optional arm's-length OpenBox Ethical Walls webhook.
-/// Fails closed (returns Err) if OpenBox is unreachable or returns BLOCK/HALT.
+/// Optional external Policy / Ethical Walls webhook.
+/// Fails closed (returns Err) if the webhook is unreachable or returns BLOCK/HALT.
 pub async fn filter_withheld_blocks(
     http: &reqwest::Client,
-    openbox_url: &str,
+    policy_webhook_url: &str,
     principal_id: &str,
     blocks: Vec<KnowledgeBlock>,
 ) -> Result<(Vec<KnowledgeBlock>, Vec<String>)> {
@@ -50,7 +50,7 @@ pub async fn filter_withheld_blocks(
 
     let url = format!(
         "{}/api/v1/governance/evaluate",
-        openbox_url.trim_end_matches('/')
+        policy_webhook_url.trim_end_matches('/')
     );
     let resp: EvaluateResp = http
         .post(url)
@@ -70,6 +70,6 @@ pub async fn filter_withheld_blocks(
                 .collect();
             Ok((kept, resp.withheld_handles))
         }
-        other => bail!("OpenBox governance denied context composition: {other}"),
+        other => bail!("Policy webhook denied context composition: {other}"),
     }
 }
