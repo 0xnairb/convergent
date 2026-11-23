@@ -12,6 +12,9 @@ dependencies = [
   "pydantic>=2.10.0",
 ]
 
+[project.scripts]
+convergent-worker = "convergent_worker.main:cli"
+
 [dependency-groups]
 dev = [
   "pytest>=8.3.0",
@@ -27,4 +30,5 @@ packages = ["src/convergent_worker"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]

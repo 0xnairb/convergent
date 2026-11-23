@@ -16,6 +16,7 @@ use serde_json::{json, Value};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::admin::{manage_space_grant, memory_history};
 use crate::ethical_walls::filter_withheld_blocks;
 use crate::inference::{build_blended_payload, forward_completion, get_active_model};
 use crate::mcp::handle_mcp;
@@ -55,6 +56,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/mcp", post(handle_mcp))
         .route("/v1/models", get(list_models))
         .route("/v1/chat/completions", post(chat_completions))
+        .route("/v1/spaces/{space_id}/grants", post(manage_space_grant))
+        .route("/v1/memory/history", get(memory_history))
         .with_state(state)
 }
 
