@@ -11,6 +11,7 @@ use axum::{
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use convergent_gateway::{
     app::{build_router, AppState},
+    backends::{create_backend, BackendKind},
     config::Config,
     kv_keys::content_blake3,
     openfga::OpenFgaClient,
@@ -85,6 +86,7 @@ async fn phase4_oauth21_pkce_mcp_streamable_http_and_openai_sse() -> anyhow::Res
         master_seed: b"phase4-master-seed".to_vec(),
         fallback_vllm_url: format!("http://{vllm_addr}"),
         fallback_model_id: test_model.clone(),
+        backend: create_backend(BackendKind::Vllm),
         policy_webhook_url: None,
         auth_codes: Arc::new(RwLock::new(HashMap::new())),
     };

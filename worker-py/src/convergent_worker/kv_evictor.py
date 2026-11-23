@@ -11,6 +11,8 @@ import httpx
 import psycopg
 import redis
 
+from .backends import InferenceBackend, create_backend
+
 
 def derive_kv_key(master_seed: bytes, clearance_scope: str, model_id: str, block_blake3: str) -> str:
     """Byte-identical to gateway-rs/src/kv_keys.rs::derive_kv_key."""
@@ -46,19 +48,11 @@ def prewarm_block(
     kv_key: str,
     valkey: redis.Redis,
     block_blake3: str,
+    backend: InferenceBackend | None = None,
 ) -> None:
-    """Issue a non-generating max_tokens=1 prefill call to warm vLLM + LMCache."""
-    resp = http.post(
-        f"{vllm_url.rstrip('/')}/v1/completions",
-        json={
-            "model": model_id,
-            "prompt": block_text,
-            "max_tokens": 1,
-            "temperature": 0.0,
-            "extra_body": {"kv_cache_key": kv_key},
-        },
-    )
-    resp.raise_for_status()
+    """Issue a non-generating 1-token prefill call via the configured backend factory and track in Valkey."""
+    engine = backend or create_backend()
+    engine.prewarm(http, vllm_url, model_id, block_text, kv_key)
     register_kv_key(valkey, block_blake3, kv_key)
 
 
@@ -71,6 +65,7 @@ def handle_supersession_event(
     model_id: str,
     master_seed: bytes,
     event: dict[str, Any],
+    backend: InferenceBackend | None = None,
 ) -> dict[str, Any]:
     """Process one `convergent.memory.superseded` event: evict stale KV and pre-warm replacement."""
     old_hash = event["old_block_hash"]
@@ -87,7 +82,7 @@ def handle_supersession_event(
     warmed_key: str | None = None
     if row is not None:
         warmed_key = derive_kv_key(master_seed, scope, model_id, new_hash)
-        prewarm_block(http, vllm_url, model_id, row[0], warmed_key, valkey, new_hash)
+        prewarm_block(http, vllm_url, model_id, row[0], warmed_key, valkey, new_hash, backend=backend)
 
     return {"evicted_count": evicted, "warmed_key": warmed_key}
 
@@ -101,6 +96,7 @@ def rewarm_model_and_cutover(
     new_endpoint_url: str,
     master_seed: bytes,
     top_n: int = 50,
+    backend: InferenceBackend | None = None,
 ) -> int:
     """Zero-downtime model swap: pre-warm top-heat active blocks on new model, then atomically cut over."""
     hot_blocks = conn.execute(
@@ -117,7 +113,7 @@ def rewarm_model_and_cutover(
     warmed = 0
     for bhash, scope, text in hot_blocks:
         kv_key = derive_kv_key(master_seed, scope, new_model_id, bhash)
-        prewarm_block(http, new_endpoint_url, new_model_id, text, kv_key, valkey, bhash)
+        prewarm_block(http, new_endpoint_url, new_model_id, text, kv_key, valkey, bhash, backend=backend)
         warmed += 1
 
     with conn.transaction():
@@ -148,6 +144,7 @@ async def drain_supersession_once(
     durable_name: str = "convergent-kv-evictor",
     batch_size: int = 10,
     fetch_timeout: float = 0.25,
+    backend: InferenceBackend | None = None,
 ) -> list[dict[str, Any]]:
     """Consume pending supersession events from NATS JetStream and ack only after Valkey DEL."""
     sub = await js.pull_subscribe("convergent.memory.superseded", durable=durable_name)
@@ -166,6 +163,7 @@ async def drain_supersession_once(
             model_id=model_id,
             master_seed=master_seed,
             event=event,
+            backend=backend,
         )
         await msg.ack()
         results.append(res)

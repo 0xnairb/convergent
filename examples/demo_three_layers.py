@@ -149,6 +149,7 @@ def run_three_layer_proof(verbose: bool = True) -> dict[str, Any]:
         "CONVERGENT_MASTER_SEED": master_seed_str,
         "CONVERGENT_VLLM_URL": vllm_url,
         "CONVERGENT_MODEL_ID": model_v1,
+        "CONVERGENT_INFERENCE_BACKEND": "dev",
     }
     gw_proc = subprocess.Popen([str(gw_bin)], env=gw_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 

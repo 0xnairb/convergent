@@ -1,5 +1,6 @@
 pub mod admin;
 pub mod app;
+pub mod backends;
 pub mod config;
 pub mod ethical_walls;
 pub mod inference;

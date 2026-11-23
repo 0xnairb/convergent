@@ -12,6 +12,7 @@ import nats
 import psycopg
 import redis
 
+from .backends import create_backend
 from .ingest import drain_ingest_once, resolve_openfga_store_id
 from .kv_evictor import drain_supersession_once
 from .outbox import relay_outbox_once
@@ -36,6 +37,7 @@ async def run_worker_loop(stop_event: asyncio.Event) -> None:
     ).encode("utf-8")
     poll_interval = float(os.environ.get("CONVERGENT_WORKER_POLL_SECS", "0.25"))
 
+    backend = create_backend(os.environ.get("CONVERGENT_INFERENCE_BACKEND"))
     nc = await nats.connect(nats_url)
     js = nc.jetstream()
     valkey = redis.Redis.from_url(valkey_url, decode_responses=True)
@@ -43,7 +45,9 @@ async def run_worker_loop(stop_event: asyncio.Event) -> None:
     with psycopg.connect(pg_dsn, autocommit=True) as conn, httpx.Client(timeout=15.0) as http:
         store_id = resolve_openfga_store_id(http, openfga_url, openfga_store_name)
         log.info(
-            "convergent-worker started (openfga_store=%s, vllm=%s, model=%s)",
+            "convergent-worker started (backend=%s/%s, openfga_store=%s, endpoint=%s, model=%s)",
+            backend.name,
+            backend.hardware_target,
             store_id,
             vllm_url,
             model_id,
@@ -73,6 +77,7 @@ async def run_worker_loop(stop_event: asyncio.Event) -> None:
                     vllm_url=vllm_url,
                     model_id=model_id,
                     master_seed=master_seed,
+                    backend=backend,
                 )
                 if evicted:
                     log.info("processed %d KV eviction/warmup event(s)", len(evicted))

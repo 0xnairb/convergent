@@ -17,8 +17,9 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::admin::{manage_space_grant, memory_history};
+use crate::backends::InferenceBackend;
 use crate::ethical_walls::filter_withheld_blocks;
-use crate::inference::{build_blended_payload, forward_completion, get_active_model};
+use crate::inference::get_active_model;
 use crate::mcp::handle_mcp;
 use crate::oauth::{issue_jwt, verify_jwt, verify_pkce_s256, Claims};
 use crate::openfga::OpenFgaClient;
@@ -44,6 +45,7 @@ pub struct AppState {
     pub master_seed: Vec<u8>,
     pub fallback_vllm_url: String,
     pub fallback_model_id: String,
+    pub backend: Arc<dyn InferenceBackend>,
     pub policy_webhook_url: Option<String>,
     pub auth_codes: Arc<RwLock<HashMap<String, PkceAuthCode>>>,
 }
@@ -61,8 +63,13 @@ pub fn build_router(state: AppState) -> Router {
         .with_state(state)
 }
 
-async fn healthz() -> Json<Value> {
-    Json(json!({ "status": "ok", "service": "convergent-gateway" }))
+async fn healthz(State(state): State<AppState>) -> Json<Value> {
+    Json(json!({
+        "status": "ok",
+        "service": "convergent-gateway",
+        "backend": state.backend.name(),
+        "hardware_target": state.backend.hardware_target(),
+    }))
 }
 
 #[derive(Deserialize)]
@@ -202,10 +209,14 @@ async fn chat_completions(
     }
 
     let active = get_active_model(&state.pool, &state.fallback_vllm_url, &state.fallback_model_id).await;
-    let (payload, kv_keys) = build_blended_payload(body, &active.model_id, &state.master_seed, &blocks);
+    let (payload, kv_keys) =
+        state
+            .backend
+            .prepare_chat_payload(body, &active.model_id, &state.master_seed, &blocks);
     let proxy_overhead_ms = t0.elapsed().as_secs_f64() * 1000.0;
 
-    let upstream = match forward_completion(&state.http, &active.endpoint_url, &payload).await {
+    let chat_url = state.backend.chat_url(&active.endpoint_url);
+    let upstream = match state.http.post(chat_url).json(&payload).send().await.and_then(|r| r.error_for_status()) {
         Ok(r) => r,
         Err(e) => return (StatusCode::BAD_GATEWAY, Json(json!({ "error": e.to_string() }))).into_response(),
     };
@@ -220,6 +231,8 @@ async fn chat_completions(
     let stream = upstream.bytes_stream().map_err(std::io::Error::other);
     let mut resp = Response::new(Body::from_stream(stream));
     resp.headers_mut().insert("content-type", content_type);
+    resp.headers_mut()
+        .insert("x-convergent-backend", HeaderValue::from_static(state.backend.name()));
     if let Some(hits) = cache_hits_hdr {
         resp.headers_mut().insert("x-convergent-cache-hits", hits);
     }

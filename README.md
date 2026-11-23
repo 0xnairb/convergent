@@ -8,6 +8,25 @@ Clean-slate **3-Layer Sovereign Cognitive Engine** for enterprises running open-
 - **Layer 3 · Smart Memory:** Single-ACID `PostgreSQL 17` (`pgvector` + `pg_search` BM25 + bi-temporal `valid_from`/`valid_to`/`superseded_by`) + `NATS JetStream` transactional outbox & Python (`uv`) workers.
 - **Hot Data Plane (`gateway-rs`):** Rust (`Axum`) serving **MCP Streamable HTTP (`/mcp`)** with **OAuth 2.1 + PKCE (`S256`)**, **OpenAI-compatible `/v1/chat/completions`** (JSON & SSE streaming), `/v1/spaces/{space_id}/grants`, and `/v1/memory/history`.
 
+## Pluggable Inference Backend Factory (`CONVERGENT_INFERENCE_BACKEND`)
+
+Switch engines without changing application code:
+
+| `CONVERGENT_INFERENCE_BACKEND` | Hardware | Engine | Example Endpoint |
+|---|---|---|---|
+| `vllm` (or `cuda`) | NVIDIA CUDA | `vLLM + LMCache` (`CacheBlend`) | `http://127.0.0.1:8000` |
+| `sglang` | NVIDIA CUDA | `SGLang + RadixAttention` | `http://127.0.0.1:30000` |
+| `mlx` (or `apple-silicon`) | Apple Silicon Metal | `mlx_lm.server` | `http://127.0.0.1:8080` |
+| `ollama` | Metal / CUDA / CPU | `Ollama` | `http://127.0.0.1:11434` |
+| `dev` | Any | `scripts/dev_vllm_server.py` | `http://127.0.0.1:8000` |
+
+Example on macOS Apple Silicon with Ollama or MLX:
+```bash
+CONVERGENT_INFERENCE_BACKEND=ollama CONVERGENT_VLLM_URL=http://127.0.0.1:11434 CONVERGENT_MODEL_ID=qwen3:8b cargo run
+# or
+CONVERGENT_INFERENCE_BACKEND=mlx CONVERGENT_VLLM_URL=http://127.0.0.1:8080 CONVERGENT_MODEL_ID=mlx-community/Qwen3-8B-4bit cargo run
+```
+
 ## Quickstart (macOS Apple Silicon / Local Dev)
 
 ```bash
