@@ -1,4 +1,4 @@
-"""Layer 1 Smart Cache eviction consumer and zero-downtime open-weight model-swap re-warmer."""
+"""Smart Cache eviction consumer and zero-downtime open-weight model-swap re-warmer."""
 
 from __future__ import annotations
 

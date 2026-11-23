@@ -8,13 +8,13 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "examples"))
 
-from demo_three_layers import run_three_layer_proof  # noqa: E402
+from demo_convergent import run_convergent_proof  # noqa: E402
 
 
-def test_full_stack_three_layers_proof() -> None:
-    report = run_three_layer_proof(verbose=True)
+def test_full_stack_convergent_proof() -> None:
+    report = run_convergent_proof(verbose=True)
 
-    # Layer 3 · Smart Memory
+    # Smart Memory
     mem = report["smart_memory"]
     assert mem["active_contains_v2_only"] is True
     assert mem["as_of_v1_recovered"] is True
@@ -22,7 +22,7 @@ def test_full_stack_three_layers_proof() -> None:
     assert len(mem["v2_citations"]) >= 1
     assert "source_uri" in mem["v2_citations"][0]
 
-    # Layer 2 · Smart Private Context
+    # Smart Private Context
     priv = report["smart_private_context"]
     assert priv["alice_sees_only_finance"] is True
     assert priv["bob_sees_only_engineering"] is True
@@ -32,7 +32,7 @@ def test_full_stack_three_layers_proof() -> None:
     assert priv["carol_same_clearance_cache_hits"] >= 1
     assert priv["bob_blocks_after_revoke"] == 0
 
-    # Layer 1 · Smart Cache
+    # Smart Cache
     cache = report["smart_cache"]
     assert cache["cold_cache_hits"] == 0
     assert cache["warm_same_scope_hits"] >= 1

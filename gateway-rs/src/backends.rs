@@ -30,7 +30,7 @@ impl BackendKind {
     }
 }
 
-/// Factory-created inference backend adapting Convergent's 3-layer context & KV keys
+/// Factory-created inference backend adapting Project Convergent's context & KV keys
 /// to CUDA (vLLM / SGLang), Apple Silicon (MLX / Ollama), or local dev engines.
 pub trait InferenceBackend: Send + Sync {
     fn name(&self) -> &'static str;

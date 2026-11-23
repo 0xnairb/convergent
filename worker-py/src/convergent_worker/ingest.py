@@ -1,4 +1,4 @@
-"""Layer 3 ingestion consumer: processes `convergent.ingest.requested` and registers OpenFGA tuples."""
+"""Smart Memory ingestion consumer: processes `convergent.ingest.requested` and registers OpenFGA tuples."""
 
 from __future__ import annotations
 

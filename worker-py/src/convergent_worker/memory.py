@@ -1,4 +1,4 @@
-"""Layer 3 Smart Memory: bi-temporal knowledge blocks, hybrid search, and transactional outbox."""
+"""Smart Memory: bi-temporal knowledge blocks, hybrid search, and transactional outbox."""
 
 from __future__ import annotations
 

@@ -42,7 +42,7 @@ pub async fn handle_mcp(
                 { "name": "list_spaces", "description": "List authorized Context Spaces", "inputSchema": { "type": "object", "properties": {} } },
                 { "name": "search_memory", "description": "Pre-filtered hybrid search over authorized Knowledge Blocks", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" }, "space_id": { "type": "string" }, "top_k": { "type": "integer" } }, "required": ["query"] } },
                 { "name": "get_block", "description": "Fetch a single authorized Knowledge Block by ID", "inputSchema": { "type": "object", "properties": { "block_id": { "type": "string" } }, "required": ["block_id"] } },
-                { "name": "ingest_note", "description": "Enqueue a new note/document for Layer-3 distillation", "inputSchema": { "type": "object", "properties": { "space_id": { "type": "string" }, "source_uri": { "type": "string" }, "content": { "type": "string" } }, "required": ["space_id", "source_uri", "content"] } }
+                { "name": "ingest_note", "description": "Enqueue a new note/document for Smart Memory distillation", "inputSchema": { "type": "object", "properties": { "space_id": { "type": "string" }, "source_uri": { "type": "string" }, "content": { "type": "string" } }, "required": ["space_id", "source_uri", "content"] } }
             ]
         })),
         "tools/call" => {

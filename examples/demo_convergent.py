@@ -1,14 +1,14 @@
-"""Standalone live sample & proof runner for Project Convergent's 3 Layers:
-  1. Smart Memory (Layer 3): Bi-temporal supersession, citations, & as_of recovery
-  2. Smart Private Context (Layer 2): OpenFGA ReBAC isolation, HMAC-SHA256 KV disjointness, instant revocation
-  3. Smart Cache (Layer 1): KV cache hits, atomic supersession eviction + prefill warmup, zero-downtime model swap
+"""Standalone live sample & proof runner for Project Convergent:
+  1. Smart Memory: Bi-temporal supersession, citations, & as_of recovery
+  2. Smart Private Context: OpenFGA ReBAC isolation, HMAC-SHA256 KV disjointness, instant revocation
+  3. Smart Cache: KV cache hits, atomic supersession eviction + prefill warmup, zero-downtime model swap
 
 Runs completely locally on macOS Apple Silicon against live Postgres 17, Valkey 8,
 OpenFGA 1.8.5, NATS JetStream, the real Rust `convergent-gateway` binary, the real
 Python `convergent-worker` loop, and `scripts/dev_vllm_server.py`.
 
 Usage:
-    cd convergent/worker-py && uv run python ../examples/demo_three_layers.py
+    cd convergent/worker-py && uv run python ../examples/demo_convergent.py
 """
 
 from __future__ import annotations
@@ -107,8 +107,8 @@ def _ensure_gateway_binary() -> Path:
     return bin_path
 
 
-def run_three_layer_proof(verbose: bool = True) -> dict[str, Any]:
-    """Boot the full local stack (dev vLLM + Rust gateway + Python worker) and prove all 3 layers."""
+def run_convergent_proof(verbose: bool = True) -> dict[str, Any]:
+    """Boot the full local stack (dev vLLM + Rust gateway + Python worker) and prove Project Convergent end-to-end."""
     model_v1 = "Qwen/Qwen3-32B-FP8"
     model_v2 = "DeepSeek/DeepSeek-V3.2-Local"
     master_seed_str = f"demo-seed-{uuid.uuid4().hex[:8]}"
@@ -200,7 +200,7 @@ def run_three_layer_proof(verbose: bool = True) -> dict[str, Any]:
                 ).raise_for_status()
 
             # =========================================================================
-            # LAYER 3 · SMART MEMORY: Bi-temporal ingest, citations, supersession, as_of
+            # SMART MEMORY: Bi-temporal ingest, citations, supersession, as_of
             # =========================================================================
             policy_uri = f"policy://travel-policy-{suffix}.md"
             _mcp_call(
@@ -232,7 +232,7 @@ def run_three_layer_proof(verbose: bool = True) -> dict[str, Any]:
             t_v1 = datetime.now(timezone.utc)
             time.sleep(0.15)
 
-            # Warm v1 KV cache via /v1/chat/completions (Layer 1 cold -> warm)
+            # Warm v1 KV cache via /v1/chat/completions (Smart Cache cold -> warm)
             cold_resp = http.post(
                 f"{gateway_url}/v1/chat/completions",
                 headers={"Authorization": f"Bearer {tok_alice}", "X-Convergent-Space": str(space_finance)},
@@ -311,7 +311,7 @@ def run_three_layer_proof(verbose: bool = True) -> dict[str, Any]:
             }
 
             # =========================================================================
-            # LAYER 2 · SMART PRIVATE CONTEXT: OpenFGA isolation, HMAC KV disjointness, revocation
+            # SMART PRIVATE CONTEXT: OpenFGA isolation, HMAC KV disjointness, revocation
             # =========================================================================
             shared_secret = f"Project Helios launch date is October 15 ({suffix})."
             _mcp_call(
@@ -393,7 +393,7 @@ def run_three_layer_proof(verbose: bool = True) -> dict[str, Any]:
             }
 
             # =========================================================================
-            # LAYER 1 · SMART CACHE: Eviction + pre-warm hit + zero-downtime model swap
+            # SMART CACHE: Eviction + pre-warm hit + zero-downtime model swap
             # =========================================================================
             post_supersede_chat = http.post(
                 f"{gateway_url}/v1/chat/completions",
@@ -454,13 +454,13 @@ def _is_healthy(http: httpx.Client, gateway_url: str) -> bool:
 
 
 def _print_report(report: dict[str, Any]) -> None:
-    print("\n================ PROJECT CONVERGENT · 3-LAYER LIVE PROOF ================")
-    for layer, metrics in report.items():
-        print(f"\n[{layer.upper()}]")
+    print("\n=================== PROJECT CONVERGENT · LIVE PROOF ===================")
+    for section, metrics in report.items():
+        print(f"\n[{section.upper()}]")
         for k, v in metrics.items():
             print(f"  - {k}: {v}")
-    print("\n=========================================================================\n")
+    print("\n=======================================================================\n")
 
 
 if __name__ == "__main__":
-    run_three_layer_proof(verbose=True)
+    run_convergent_proof(verbose=True)
