@@ -1,4 +1,12 @@
+pub mod app;
 pub mod config;
+pub mod ethical_walls;
+pub mod inference;
+pub mod kv_keys;
+pub mod mcp;
+pub mod oauth;
+pub mod openfga;
+pub mod retrieval;
 
 use axum::{routing::get, Json, Router};
 use serde_json::{json, Value};
