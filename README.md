@@ -107,6 +107,25 @@ Observed results (`granite4.2:3b`, `40.21s`, 8 cross-URI contradictions + 4 addi
 | Old Superseded Block Retrieved in Active Context | **`8/8 (100.0%)`** | **`0/8 (0.0%)`** *(all 8 old blocks marked `valid_to`)* |
 | Example Failure Prevented (`infra://primary-region.md` vs `incident://postmortem-42-migration.md`) | Hallucinated stale **`us-east-1`** | Answered **`eu-central-1`** |
 
+- **Source-Authority Guardrail & Conflict Queue ([002_semantic_authority.sql](migrations/002_semantic_authority.sql)):** Lower-authority sources (e.g., `slack://`, authority `1`) contradicting higher-authority policies (e.g., `legal://`, authority `4`) are **quarantined** in `conflict_reviews` instead of silently overwriting active policy until explicitly approved via `resolve_conflict()`.
+
+### Apple Silicon Metal GPU (`MLX`) Tensor-Level KV Cache & Side-Channel Proof
+
+Run the real Metal GPU tensor-level KV-block splicing, physical `.safetensors` eviction, and statistical Welch's t-test side-channel proof ([mlx-kv/kv_store.py](mlx-kv/kv_store.py), [benchmarks/mlx_kv_cache_bench.py](benchmarks/mlx_kv_cache_bench.py)):
+
+```bash
+python3 benchmarks/mlx_kv_cache_bench.py
+```
+
+Observed results (`mlx 0.32.4` on `Device(gpu, 0)`, `16L x 8H x 128D float16`, `512` tokens/block):
+
+| Proof | Observed Value | Verdict |
+|---|---|---|
+| Non-prefix `CacheBlend` (`[A, C]` after `[A, B, C]`) | **`11.81 ms`** vs **`29.81 ms`** cold (**`2.52x` TTFT speedup**, `153/1024` boundary tokens recomputed) | Real non-prefix GPU KV reuse |
+| Same-clearance hit (`carol` after `alice`, `space:finance`) | **`1` hit**, **`3.67 ms`** TTFT | Shared warm Metal KV |
+| Cross-clearance identical secret (`bob`, `space:engineering`) | **`0` hits**, **`50.74 ms`** vs **`52.13 ms`** unseen (**Welch's `t = -0.137`**) | Zero timing side-channel (`leak=false`) |
+| Physical tensor eviction (`evict_block(B)`) | **`1` GPU tensor + `1` `.safetensors` file deleted**, **`0`** post-evict hits | 100% stale tensor purge |
+
 ## Running Tests
 
 ```bash

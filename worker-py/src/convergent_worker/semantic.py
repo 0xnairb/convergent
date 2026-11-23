@@ -34,7 +34,25 @@ class SemanticIngestResult:
     block_ids: list[uuid.UUID]
     superseded_block_ids: list[uuid.UUID]
     cross_doc_superseded_ids: list[uuid.UUID]
+    quarantined_conflict_ids: list[uuid.UUID]
     claims: list[ExtractedClaim]
+
+
+_AUTHORITY_PREFIXES: list[tuple[tuple[str, ...], int]] = [
+    (("legal://", "policy://", "compliance://", "signed://"), 4),
+    (("adr://", "memo://", "infosec://", "incident://", "postmortem://", "finance://", "eng://"), 3),
+    (("handbook://", "rfc://", "sales://", "ops://", "infra://", "email://", "docs://", "wiki://"), 2),
+    (("slack://", "chat://", "note://", "dm://"), 1),
+]
+
+
+def infer_source_authority(source_uri: str) -> int:
+    """Infer governance authority tier (1=informal chat .. 4=signed legal/policy) from source URI."""
+    lower = source_uri.strip().lower()
+    for prefixes, level in _AUTHORITY_PREFIXES:
+        if lower.startswith(prefixes):
+            return level
+    return 2
 
 
 def ollama_json_chat(
@@ -167,22 +185,24 @@ def ingest_document_semantic(
     text: str,
     extractor: Callable[[str], list[ExtractedClaim]],
     classifier: Callable[[str, str], RelationVerdict],
+    source_authority: int | None = None,
     confidence_threshold: float = 0.75,
     candidate_limit: int = 8,
     block_type: str = "claim",
 ) -> SemanticIngestResult:
     """Distill text into atomic claims, detect cross-document contradictions within the same clearance scope,
-    and atomically supersede conflicting active blocks + emit durable KV eviction outbox events."""
+    enforce source-authority guardrails (quarantining lower-authority overrides into `conflict_reviews`),
+    and atomically supersede authorized conflicting blocks + emit durable KV eviction outbox events."""
     norm = canonical_text(text)
     doc_hash = blake3_hex(norm)
     doc_id = uuid.uuid4()
+    new_auth = source_authority if source_authority is not None else infer_source_authority(source_uri)
     claims = extractor(norm)
 
     # Fetch candidate active blocks in the SAME org + space + clearance_scope (cross-document!)
-    # We query outside the write lock first for LLM classification, then lock & update atomically.
     candidate_rows = conn.execute(
         """
-        SELECT kb.id, kb.content_blake3, kb.clearance_scope, kb.canonical_text, d.source_uri
+        SELECT kb.id, kb.content_blake3, kb.clearance_scope, kb.canonical_text, d.source_uri, d.source_authority
         FROM knowledge_blocks kb
         JOIN documents d ON d.id = kb.document_id
         WHERE kb.org_id = %s
@@ -195,19 +215,19 @@ def ingest_document_semantic(
         (org_id, space_id, clearance_scope),
     ).fetchall()
 
-    # Map each new claim index -> list of (old_id, old_hash, old_scope, old_uri, reason) to supersede
+    # Map each new claim index -> list of auto-supersessions and quarantined conflicts
     supersede_plan: dict[int, list[tuple[uuid.UUID, str, str, str, str]]] = {}
+    quarantine_plan: dict[int, list[tuple[uuid.UUID, int, float, str]]] = {}
     already_claimed: set[uuid.UUID] = set()
 
     for idx, c in enumerate(claims):
-        # Rank candidates by simple token overlap + recency so we only call LLM on plausible candidates
         c_tokens = {w for w in c.claim.lower().replace(",", "").split() if len(w) > 2}
         e_tokens = {w for w in c.entity.lower().replace(",", "").split() if len(w) > 2}
         q_tokens = c_tokens | e_tokens
 
         scored: list[tuple[int, tuple[Any, ...]]] = []
         for row in candidate_rows:
-            old_id, _old_hash, _old_scope, old_text, old_uri = row
+            old_id, _old_hash, _old_scope, old_text, old_uri, _old_auth = row
             if old_id in already_claimed:
                 continue
             if old_uri == source_uri:
@@ -220,7 +240,7 @@ def ingest_document_semantic(
 
         scored.sort(key=lambda pair: pair[0], reverse=True)
         for _score, row in scored[:candidate_limit]:
-            old_id, old_hash, old_scope, old_text, old_uri = row
+            old_id, old_hash, old_scope, old_text, old_uri, old_auth = row
             if old_id in already_claimed:
                 continue
             if old_uri == source_uri:
@@ -229,20 +249,24 @@ def ingest_document_semantic(
                 continue
             verdict = classifier(str(old_text), c.claim)
             if verdict.relation == "SUPERSEDES" and verdict.confidence >= confidence_threshold:
-                supersede_plan.setdefault(idx, []).append((old_id, old_hash, old_scope, old_uri, verdict.reason))
+                if new_auth >= int(old_auth):
+                    supersede_plan.setdefault(idx, []).append((old_id, old_hash, old_scope, old_uri, verdict.reason))
+                else:
+                    quarantine_plan.setdefault(idx, []).append((old_id, int(old_auth), verdict.confidence, verdict.reason))
                 already_claimed.add(old_id)
 
     new_block_ids: list[uuid.UUID] = []
     superseded_ids: list[uuid.UUID] = []
     cross_doc_ids: list[uuid.UUID] = []
+    quarantined_ids: list[uuid.UUID] = []
 
     with conn.transaction():
         conn.execute(
             """
-            INSERT INTO documents (id, org_id, space_id, clearance_scope, source_uri, content_blake3)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO documents (id, org_id, space_id, clearance_scope, source_uri, content_blake3, source_authority)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
-            (doc_id, org_id, space_id, clearance_scope, source_uri, doc_hash),
+            (doc_id, org_id, space_id, clearance_scope, source_uri, doc_hash, new_auth),
         )
 
         for idx, c in enumerate(claims):
@@ -250,13 +274,14 @@ def ingest_document_semantic(
             bhash = blake3_hex(c.claim)
             citations = _find_citation(norm, source_uri, c.quote)
             emb = pgvector_literal(embed_text(c.claim))
+            is_quarantined = idx in quarantine_plan
             conn.execute(
                 """
                 INSERT INTO knowledge_blocks (
                   id, document_id, org_id, space_id, clearance_scope,
-                  block_type, canonical_text, content_blake3, citations, embedding
+                  block_type, canonical_text, content_blake3, citations, embedding, valid_to
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::vector)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::vector, CASE WHEN %s THEN now() ELSE NULL END)
                 """,
                 (
                     bid,
@@ -264,14 +289,29 @@ def ingest_document_semantic(
                     org_id,
                     space_id,
                     clearance_scope,
-                    block_type,
+                    "quarantined_claim" if is_quarantined else block_type,
                     c.claim,
                     bhash,
                     json.dumps(citations),
                     emb,
+                    is_quarantined,
                 ),
             )
             new_block_ids.append(bid)
+
+            for old_id, old_auth, conf, reason in quarantine_plan.get(idx, []):
+                cid = uuid.uuid4()
+                conn.execute(
+                    """
+                    INSERT INTO conflict_reviews (
+                      id, org_id, space_id, existing_block_id, candidate_block_id,
+                      existing_authority, candidate_authority, confidence, reason, status
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending')
+                    """,
+                    (cid, org_id, space_id, old_id, bid, old_auth, new_auth, conf, reason),
+                )
+                quarantined_ids.append(cid)
 
             for old_id, old_hash, old_scope, old_uri, reason in supersede_plan.get(idx, []):
                 updated = conn.execute(
@@ -313,5 +353,74 @@ def ingest_document_semantic(
         block_ids=new_block_ids,
         superseded_block_ids=superseded_ids,
         cross_doc_superseded_ids=cross_doc_ids,
+        quarantined_conflict_ids=quarantined_ids,
         claims=claims,
     )
+
+
+def resolve_conflict(
+    conn: psycopg.Connection,
+    *,
+    conflict_id: uuid.UUID,
+    decision: str,
+    resolved_by: str = "reviewer",
+) -> dict[str, Any]:
+    """Approve or reject a quarantined lower-authority conflict review atomically."""
+    if decision not in ("approve", "reject"):
+        raise ValueError("decision must be 'approve' or 'reject'")
+
+    with conn.transaction():
+        row = conn.execute(
+            """
+            SELECT cr.org_id, cr.space_id, cr.existing_block_id, cr.candidate_block_id, cr.reason,
+                   eb.content_blake3, eb.clearance_scope, cb.content_blake3
+            FROM conflict_reviews cr
+            JOIN knowledge_blocks eb ON eb.id = cr.existing_block_id
+            JOIN knowledge_blocks cb ON cb.id = cr.candidate_block_id
+            WHERE cr.id = %s AND cr.status = 'pending'
+            FOR UPDATE OF cr
+            """,
+            (conflict_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"pending conflict {conflict_id} not found")
+
+        org_id, space_id, old_id, new_id, reason, old_hash, old_scope, new_hash = row
+        if decision == "approve":
+            conn.execute(
+                "UPDATE knowledge_blocks SET valid_to = NULL, block_type = 'claim' WHERE id = %s",
+                (new_id,),
+            )
+            conn.execute(
+                "UPDATE knowledge_blocks SET valid_to = now(), superseded_by = %s WHERE id = %s AND valid_to IS NULL",
+                (new_id, old_id),
+            )
+            msg_id = f"superseded:{old_id}:{new_id}"
+            payload = {
+                "tenant_id": str(org_id),
+                "space_id": str(space_id),
+                "clearance_scope": old_scope,
+                "old_block_id": str(old_id),
+                "old_block_hash": old_hash,
+                "new_block_id": str(new_id),
+                "new_block_hash": new_hash,
+                "reason": f"approved_conflict:{reason}",
+                "cross_document": True,
+            }
+            conn.execute(
+                """
+                INSERT INTO outbox_events (msg_id, subject, payload)
+                VALUES (%s, 'convergent.memory.superseded', %s::jsonb)
+                ON CONFLICT (msg_id) DO NOTHING
+                """,
+                (msg_id, json.dumps(payload)),
+            )
+            new_status = "approved"
+        else:
+            new_status = "rejected"
+
+        conn.execute(
+            "UPDATE conflict_reviews SET status = %s, resolved_at = now(), resolved_by = %s WHERE id = %s",
+            (new_status, resolved_by, conflict_id),
+        )
+    return {"conflict_id": str(conflict_id), "status": new_status, "superseded_block_id": str(old_id) if decision == "approve" else None}

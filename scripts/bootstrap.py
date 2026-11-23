@@ -22,10 +22,10 @@ NATS_URL = os.environ.get("CONVERGENT_NATS_URL", "nats://127.0.0.1:54222")
 
 
 def migrate_postgres() -> None:
-    sql_path = ROOT / "migrations" / "001_init.sql"
-    sql = sql_path.read_text(encoding="utf-8")
+    migrations_dir = ROOT / "migrations"
     with psycopg.connect(PG_DSN, autocommit=True) as conn:
-        conn.execute(sql)
+        for sql_path in sorted(migrations_dir.glob("*.sql")):
+            conn.execute(sql_path.read_text(encoding="utf-8"))
 
 
 def bootstrap_openfga(store_name: str = "convergent") -> tuple[str, str]:
