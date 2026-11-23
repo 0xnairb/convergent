@@ -11,6 +11,7 @@ use axum::{
     Json, Router,
 };
 use futures_util::TryStreamExt;
+use redis::AsyncCommands;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::PgPool;
@@ -213,6 +214,28 @@ async fn chat_completions(
         state
             .backend
             .prepare_chat_payload(body, &active.model_id, &state.master_seed, &blocks);
+
+    // For backends without native KV-key headers (e.g. Ollama, MLX), track per-clearance HMAC KV hits in Valkey.
+    let mut gateway_cache_hits: Option<usize> = None;
+    if !state.backend.supports_native_kv_keys() && !kv_keys.is_empty() {
+        if let Ok(mut valkey) = state.valkey.get_multiplexed_async_connection().await {
+            let mut hits = 0usize;
+            for (idx, kv_key) in kv_keys.iter().enumerate() {
+                let exists: bool = valkey.exists(kv_key).await.unwrap_or(false);
+                if exists {
+                    hits += 1;
+                } else {
+                    let _: Result<(), _> = valkey.set_ex(kv_key, "warm", 3600).await;
+                    if let Some(block) = blocks.get(idx) {
+                        let idx_key = format!("cvg:kv_index:{}", block.content_blake3);
+                        let _: Result<(), _> = valkey.sadd(&idx_key, kv_key).await;
+                    }
+                }
+            }
+            gateway_cache_hits = Some(hits);
+        }
+    }
+
     let proxy_overhead_ms = t0.elapsed().as_secs_f64() * 1000.0;
 
     let chat_url = state.backend.chat_url(&active.endpoint_url);
@@ -226,7 +249,11 @@ async fn chat_completions(
         .get("content-type")
         .cloned()
         .unwrap_or_else(|| HeaderValue::from_static("application/json"));
-    let cache_hits_hdr = upstream.headers().get("x-convergent-dev-cache-hits").cloned();
+    let cache_hits_hdr = upstream
+        .headers()
+        .get("x-convergent-dev-cache-hits")
+        .cloned()
+        .or_else(|| gateway_cache_hits.and_then(|h| HeaderValue::from_str(&h.to_string()).ok()));
 
     let stream = upstream.bytes_stream().map_err(std::io::Error::other);
     let mut resp = Response::new(Body::from_stream(stream));

@@ -12,7 +12,13 @@ from demo_convergent import run_convergent_proof  # noqa: E402
 
 
 def test_full_stack_convergent_proof() -> None:
-    report = run_convergent_proof(verbose=True)
+    report = run_convergent_proof(
+        disposable_infra=False,
+        backend="dev",
+        model_id="Qwen/Qwen3-32B-FP8",
+        swap_model_id="DeepSeek/DeepSeek-V3.2-Local",
+        verbose=True,
+    )
 
     # Smart Memory
     mem = report["smart_memory"]
@@ -34,6 +40,7 @@ def test_full_stack_convergent_proof() -> None:
 
     # Smart Cache
     cache = report["smart_cache"]
+    assert cache["backend_header"] == "dev"
     assert cache["cold_cache_hits"] == 0
     assert cache["warm_same_scope_hits"] >= 1
     assert cache["stale_v1_kv_evicted"] is True
