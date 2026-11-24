@@ -147,7 +147,7 @@ async fn phase4_oauth21_pkce_mcp_streamable_http_and_openai_sse() -> anyhow::Res
         .bearer_auth(bearer)
         .json(&json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" }))
         .send().await?.error_for_status()?.json().await?;
-    assert_eq!(mcp_list["result"]["tools"].as_array().unwrap().len(), 4);
+    assert_eq!(mcp_list["result"]["tools"].as_array().unwrap().len(), 9);
 
     let mcp_search: Value = http
         .post(format!("{gw_url}/mcp"))
