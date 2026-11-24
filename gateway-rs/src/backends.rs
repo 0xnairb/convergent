@@ -12,6 +12,8 @@ pub enum BackendKind {
     Sglang,
     Mlx,
     Ollama,
+    OpenAi,
+    Anthropic,
     Dev,
 }
 
@@ -22,9 +24,11 @@ impl BackendKind {
             "sglang" | "sglang-cuda" => Ok(Self::Sglang),
             "mlx" | "apple-silicon" | "metal" => Ok(Self::Mlx),
             "ollama" => Ok(Self::Ollama),
+            "openai" | "openai-proxy" => Ok(Self::OpenAi),
+            "anthropic" | "claude" => Ok(Self::Anthropic),
             "dev" | "simulator" => Ok(Self::Dev),
             other => bail!(
-                "unsupported CONVERGENT_INFERENCE_BACKEND '{other}'; expected one of: vllm (cuda), sglang, mlx, ollama, dev"
+                "unsupported CONVERGENT_INFERENCE_BACKEND '{other}'; expected one of: vllm (cuda), sglang, mlx, ollama, openai, anthropic, dev"
             ),
         }
     }
@@ -39,6 +43,10 @@ pub trait InferenceBackend: Send + Sync {
 
     fn chat_url(&self, endpoint_url: &str) -> String {
         format!("{}/v1/chat/completions", endpoint_url.trim_end_matches('/'))
+    }
+
+    fn extra_headers(&self) -> Vec<(String, String)> {
+        vec![]
     }
 
     fn prepare_chat_payload(
@@ -132,6 +140,69 @@ impl InferenceBackend for OllamaBackend {
     }
 }
 
+pub struct OpenAiBackend;
+impl InferenceBackend for OpenAiBackend {
+    fn name(&self) -> &'static str { "openai" }
+    fn hardware_target(&self) -> &'static str { "cloud-proxy" }
+    fn supports_native_kv_keys(&self) -> bool { false }
+    fn extra_headers(&self) -> Vec<(String, String)> {
+        match std::env::var("OPENAI_API_KEY") {
+            Ok(k) if !k.trim().is_empty() => vec![("authorization".into(), format!("Bearer {k}"))],
+            _ => vec![],
+        }
+    }
+    fn apply_backend_options(&self, body: &mut Value, kv_keys: &[String]) {
+        if let Some(obj) = body.as_object_mut() {
+            obj.remove("extra_body");
+        }
+        // Map branch/space HMAC KV key to OpenAI's prompt_cache_key so merges/reverts auto-bust cache.
+        if let Some(first_key) = kv_keys.first() {
+            body["prompt_cache_key"] = json!(first_key);
+        }
+    }
+}
+
+pub struct AnthropicBackend;
+impl InferenceBackend for AnthropicBackend {
+    fn name(&self) -> &'static str { "anthropic" }
+    fn hardware_target(&self) -> &'static str { "cloud-proxy" }
+    fn supports_native_kv_keys(&self) -> bool { false }
+    fn chat_url(&self, endpoint_url: &str) -> String {
+        format!("{}/v1/messages", endpoint_url.trim_end_matches('/'))
+    }
+    fn extra_headers(&self) -> Vec<(String, String)> {
+        let mut hdrs = vec![("anthropic-version".into(), "2023-06-01".into())];
+        if let Ok(k) = std::env::var("ANTHROPIC_API_KEY") {
+            if !k.trim().is_empty() {
+                hdrs.push(("x-api-key".into(), k));
+            }
+        }
+        hdrs
+    }
+    fn apply_backend_options(&self, body: &mut Value, _kv_keys: &[String]) {
+        if let Some(obj) = body.as_object_mut() {
+            obj.remove("extra_body");
+        }
+        // Convert leading system message into Anthropic's cache_control: ephemeral block.
+        if let Some(messages) = body.get_mut("messages").and_then(|m| m.as_array_mut()) {
+            if let Some(first) = messages.first() {
+                if first.get("role").and_then(|r| r.as_str()) == Some("system") {
+                    let sys_text = first.get("content").and_then(|c| c.as_str()).unwrap_or("").to_string();
+                    messages.remove(0);
+                    body["system"] = json!([{
+                        "type": "text",
+                        "text": sys_text,
+                        "cache_control": { "type": "ephemeral" }
+                    }]);
+                }
+            }
+        }
+        if body.get("max_tokens").is_none() {
+            body["max_tokens"] = json!(1024);
+        }
+    }
+}
+
 pub struct DevBackend;
 impl InferenceBackend for DevBackend {
     fn name(&self) -> &'static str { "dev" }
@@ -153,6 +224,8 @@ pub fn create_backend(kind: BackendKind) -> Arc<dyn InferenceBackend> {
         BackendKind::Sglang => Arc::new(SglangBackend),
         BackendKind::Mlx => Arc::new(MlxBackend),
         BackendKind::Ollama => Arc::new(OllamaBackend),
+        BackendKind::OpenAi => Arc::new(OpenAiBackend),
+        BackendKind::Anthropic => Arc::new(AnthropicBackend),
         BackendKind::Dev => Arc::new(DevBackend),
     }
 }
@@ -185,6 +258,8 @@ mod tests {
         assert_eq!(create_backend_from_str("sglang").unwrap().name(), "sglang");
         assert_eq!(create_backend_from_str("mlx").unwrap().name(), "mlx");
         assert_eq!(create_backend_from_str("ollama").unwrap().name(), "ollama");
+        assert_eq!(create_backend_from_str("openai").unwrap().name(), "openai");
+        assert_eq!(create_backend_from_str("anthropic").unwrap().name(), "anthropic");
         assert_eq!(create_backend_from_str("dev").unwrap().name(), "dev");
         assert!(create_backend_from_str("unknown-engine").is_err());
     }
@@ -205,6 +280,16 @@ mod tests {
         assert_eq!(mlx_keys.len(), 1);
         assert!(mlx_payload.get("extra_body").is_none());
         assert_eq!(mlx_payload["messages"][0]["role"], "system");
+
+        let (openai_payload, openai_keys) = create_backend(BackendKind::OpenAi)
+            .prepare_chat_payload(base.clone(), "gpt-5", b"seed", &blocks);
+        assert_eq!(openai_payload["prompt_cache_key"], openai_keys[0]);
+        assert!(openai_payload.get("extra_body").is_none());
+
+        let (anthropic_payload, _) = create_backend(BackendKind::Anthropic)
+            .prepare_chat_payload(base.clone(), "claude-sonnet-4", b"seed", &blocks);
+        assert_eq!(anthropic_payload["system"][0]["cache_control"]["type"], "ephemeral");
+        assert_eq!(anthropic_payload["messages"][0]["role"], "user");
 
         let (ollama_payload, ollama_keys) = create_backend(BackendKind::Ollama)
             .prepare_chat_payload(base, "qwen3:8b", b"seed", &blocks);

@@ -2,22 +2,24 @@
 
 Clean-slate **Sovereign Cognitive Engine** for enterprises running open-weight LLMs in customer VPCs.
 
-## Architecture
-- **Smart Cache:** `vLLM` + `LMCache` (`CacheBlend`) tiered to `Valkey` + NATS-driven atomic KV eviction (`Valkey DEL`) & `max_tokens=1` prefill warming + zero-downtime `model_registry` cutover.
-- **Smart Private Context:** Deterministic `OpenFGA` Zanzibar ReBAC pre-filtering + per-clearance `HMAC-SHA256` KV key isolation + opt-in Policy Ethical Walls (`Withheld[]`) webhook.
-- **Smart Memory:** Single-ACID `PostgreSQL 17` (`pgvector` + `pg_search` BM25 + bi-temporal `valid_from`/`valid_to`/`superseded_by`) + `NATS JetStream` transactional outbox & Python (`uv`) workers.
-- **Hot Data Plane (`gateway-rs`):** Rust (`Axum`) serving **MCP Streamable HTTP (`/mcp`)** with **OAuth 2.1 + PKCE (`S256`)**, **OpenAI-compatible `/v1/chat/completions`** (JSON & SSE streaming), `/v1/spaces/{space_id}/grants`, and `/v1/memory/history`.
+## Core Pillars (AGI-Era Focus)
+- **Git-for-World-State ([branches.py](worker-py/src/convergent_worker/branches.py), [003_world_state_branches.sql](migrations/003_world_state_branches.sql)):** `branch`, `commit`, `diff`, `merge`, `revert`, and bi-temporal `as_of` replay over primary sources & explicit decisions in single-ACID `PostgreSQL 17`.
+- **Multiplayer Shared Spaces + Hard Isolation:** Private developer/agent branches, shared team `main` brain with real-time NATS merge broadcasts, and deterministic `OpenFGA` + per-branch/per-space `HMAC-SHA256` KV isolation.
+- **Hybrid Inference & Smart Cache Base:** Pluggable backend factory running the exact same Brain across self-hosted (`vLLM`/`SGLang` CUDA, `MLX`/`Ollama` Apple Silicon) and cloud proxies (`OpenAI` `prompt_cache_key`, `Anthropic` `cache_control: ephemeral`), with atomic KV eviction & pre-warming on merge/revert.
+- **Hot Data Plane (`gateway-rs`):** Rust (`Axum`) serving **MCP Streamable HTTP (`/mcp`)** with **OAuth 2.1 + PKCE (`S256`)**, **OpenAI-compatible `/v1/chat/completions`**, `/v1/spaces/{space_id}/grants`, and `/v1/memory/history`.
 
 ## Pluggable Inference Backend Factory (`CONVERGENT_INFERENCE_BACKEND`)
 
-Switch engines without changing application code:
+Switch engines without changing application code or migrating memory:
 
-| `CONVERGENT_INFERENCE_BACKEND` | Hardware | Engine | Example Endpoint |
+| `CONVERGENT_INFERENCE_BACKEND` | Target | Engine | Example Endpoint |
 |---|---|---|---|
 | `vllm` (or `cuda`) | NVIDIA CUDA | `vLLM + LMCache` (`CacheBlend`) | `http://127.0.0.1:8000` |
 | `sglang` | NVIDIA CUDA | `SGLang + RadixAttention` | `http://127.0.0.1:30000` |
-| `mlx` (or `apple-silicon`) | Apple Silicon Metal | `mlx_lm.server` | `http://127.0.0.1:8080` |
+| `mlx` (or `apple-silicon`) | Apple Silicon Metal | `mlx_lm.server` / `mlx-kv` | `http://127.0.0.1:8080` |
 | `ollama` | Metal / CUDA / CPU | `Ollama` | `http://127.0.0.1:11434` |
+| `openai` | Cloud Proxy | OpenAI API (`prompt_cache_key`) | `https://api.openai.com` |
+| `anthropic` | Cloud Proxy | Anthropic API (`cache_control: ephemeral`) | `https://api.anthropic.com` |
 | `dev` | Any | `scripts/dev_vllm_server.py` | `http://127.0.0.1:8000` |
 
 Example on macOS Apple Silicon with Ollama or MLX:

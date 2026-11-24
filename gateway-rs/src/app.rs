@@ -239,7 +239,11 @@ async fn chat_completions(
     let proxy_overhead_ms = t0.elapsed().as_secs_f64() * 1000.0;
 
     let chat_url = state.backend.chat_url(&active.endpoint_url);
-    let upstream = match state.http.post(chat_url).json(&payload).send().await.and_then(|r| r.error_for_status()) {
+    let mut req_builder = state.http.post(chat_url).json(&payload);
+    for (k, v) in state.backend.extra_headers() {
+        req_builder = req_builder.header(k, v);
+    }
+    let upstream = match req_builder.send().await.and_then(|r| r.error_for_status()) {
         Ok(r) => r,
         Err(e) => return (StatusCode::BAD_GATEWAY, Json(json!({ "error": e.to_string() }))).into_response(),
     };

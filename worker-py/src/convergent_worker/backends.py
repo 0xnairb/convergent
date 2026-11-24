@@ -108,6 +108,28 @@ class OllamaBackend(InferenceBackend):
         resp.raise_for_status()
 
 
+class OpenAiProxyBackend(InferenceBackend):
+    """Cloud OpenAI proxy backend (uses prompt_cache_key; prewarm is a no-op to avoid cloud token spend)."""
+
+    name = "openai"
+    hardware_target = "cloud-proxy"
+    supports_native_kv_keys = False
+
+    def prewarm(self, http: httpx.Client, endpoint_url: str, model_id: str, block_text: str, kv_key: str) -> None:
+        return
+
+
+class AnthropicProxyBackend(InferenceBackend):
+    """Cloud Anthropic proxy backend (uses ephemeral cache_control; prewarm is a no-op to avoid cloud token spend)."""
+
+    name = "anthropic"
+    hardware_target = "cloud-proxy"
+    supports_native_kv_keys = False
+
+    def prewarm(self, http: httpx.Client, endpoint_url: str, model_id: str, block_text: str, kv_key: str) -> None:
+        return
+
+
 class DevBackend(VllmBackend):
     name = "dev"
     hardware_target = "local-simulator"
@@ -123,6 +145,10 @@ _REGISTRY: dict[str, type[InferenceBackend]] = {
     "apple-silicon": MlxBackend,
     "metal": MlxBackend,
     "ollama": OllamaBackend,
+    "openai": OpenAiProxyBackend,
+    "openai-proxy": OpenAiProxyBackend,
+    "anthropic": AnthropicProxyBackend,
+    "claude": AnthropicProxyBackend,
     "dev": DevBackend,
     "simulator": DevBackend,
 }
