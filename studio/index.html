@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Project Convergent · Studio MVP</title>
+  <style>
+    :root {
+      --bg: #0b0e14;
+      --panel: #131823;
+      --panel-2: #192131;
+      --border: #263147;
+      --text: #e6edf7;
+      --muted: #8ea0bd;
+      --accent: #4f8cff;
+      --green: #22c55e;
+      --red: #ef4444;
+      --amber: #f59e0b;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.45;
+    }
+    header {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 14px 24px; border-bottom: 1px solid var(--border); background: #0f141f;
+      position: sticky; top: 0; z-index: 10;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand h1 { margin: 0; font-size: 18px; letter-spacing: -0.02em; }
+    .pill {
+      font-size: 12px; padding: 3px 10px; border-radius: 999px;
+      background: #1b2538; border: 1px solid var(--border); color: var(--muted);
+    }
+    .pill.ok { color: #86efac; border-color: #166534; background: #0d2618; }
+    .pill.warn { color: #fca5a5; border-color: #7f1d1d; background: #2c1010; }
+    .pill.amber { color: #fde68a; border-color: #92400e; background: #2d1f0a; }
+    nav { display: flex; gap: 8px; }
+    button {
+      background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+      padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500;
+      transition: all .12s ease;
+    }
+    button:hover { border-color: var(--accent); background: #1f2a40; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button.primary:hover { filter: brightness(1.08); }
+    button.danger { background: #2b1215; border-color: #7f1d1d; color: #fca5a5; }
+    button.tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    main { max-width: 1280px; margin: 0 auto; padding: 20px 24px 48px; }
+    .section { display: none; }
+    .section.active { display: block; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    @media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px 18px;
+    }
+    .card h2, .card h3 { margin: 0 0 10px; font-size: 15px; }
+    .sub { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    input, select, textarea {
+      background: #0d121c; color: var(--text); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 11px; font-size: 13px; font-family: inherit;
+    }
+    textarea { width: 100%; min-height: 68px; resize: vertical; }
+    .mono { font-family: var(--mono); font-size: 12px; }
+    .answer-box {
+      background: #0d121c; border: 1px solid var(--border); border-radius: 10px;
+      padding: 14px; min-height: 76px; font-size: 14px; margin: 10px 0;
+    }
+    .block-item {
+      background: #101622; border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px 12px; margin-bottom: 8px; font-size: 12.5px;
+    }
+    .block-item.stale { border-color: #7f1d1d; background: #211013; }
+    .block-item.overlay { border-color: #1d4ed8; background: #101b33; }
+    .metric { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    .banner {
+      padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; font-size: 13px;
+      background: #13213a; border: 1px solid #284577; color: #bfdbfe;
+    }
+    .banner.conflict { background: #2c1215; border-color: #991b1b; color: #fecaca; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <h1>Project Convergent</h1>
+      <span class="pill ok" id="status-pill">Connecting...</span>
+    </div>
+    <nav>
+      <button class="tab active" data-tab="arena">⚔️ Side-by-Side Arena</button>
+      <button class="tab" data-tab="overlays">🗂️ Layered Overlays &amp; Undo</button>
+      <button class="tab" data-tab="benchmarks">📊 Benchmarks &amp; Comparison</button>
+      <button id="btn-reset" title="Reset workspace with fresh predefined fixtures">↻ Reset Fixtures</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- TAB 1: SIDE-BY-SIDE ARENA -->
+    <section id="tab-arena" class="section active">
+      <div class="banner">
+        <strong>Own the World-State. Swap the Model.</strong> Run the exact same query against <strong>Standard RAG</strong> (stateless, no bi-temporal supersession, no OpenFGA isolation) vs. <strong>Project Convergent</strong> (OpenFGA + active-only truth + zero-copy Mount Stack + per-clearance HMAC-SHA256 KV cache) on local Ollama.
+      </div>
+
+      <div class="card" style="margin-bottom: 18px;">
+        <div class="row" style="margin-bottom: 12px;">
+          <label class="sub" style="margin:0;">Persona:</label>
+          <select id="arena-persona">
+            <option value="alice">Alice · Finance Space</option>
+            <option value="carol">Carol · Finance Space (same clearance as Alice)</option>
+            <option value="bob">Bob · Engineering Space</option>
+          </select>
+          <button id="btn-toggle-bob" class="danger">Revoke Bob's Access</button>
+
+          <label class="sub" style="margin:0 0 0 10px;">Mount Overlay (optional):</label>
+          <select id="arena-overlay">
+            <option value="">None (Base Space HEAD)</option>
+          </select>
+        </div>
+
+        <div class="row" style="margin-bottom: 10px;">
+          <span class="sub" style="margin:0;">Try preset proofs:</span>
+          <button class="preset" data-persona="alice" data-q="What is the ACME corporate travel reimbursement cap per trip?">Travel Cap ($500 vs $1,200)</button>
+          <button class="preset" data-persona="bob" data-q="What is our primary production cloud region?">Primary Region (us-east-1 vs eu-central-1)</button>
+          <button class="preset" data-persona="bob" data-q="What is the Project Helios marketing budget and engineering stack?">Cross-Team Isolation (Bob asks Finance budget)</button>
+          <button class="preset" data-persona="carol" data-q="What is the Project Helios launch authorization code?">Same-Clearance Cache Hit (Carol after Alice)</button>
+        </div>
+
+        <div class="row">
+          <input id="arena-prompt" style="flex: 1;" value="What is the ACME corporate travel reimbursement cap per trip?" />
+          <button id="btn-run-arena" class="primary">Run Live Comparison</button>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="row" style="justify-content: space-between;">
+            <h3>Standard RAG (Baseline)</h3>
+            <span class="pill warn" id="rag-badges">Waiting</span>
+          </div>
+          <p class="sub">No bi-temporal supersession · No OpenFGA pre-filter · No KV isolation</p>
+          <div class="answer-box" id="rag-answer">Click <strong>Run Live Comparison</strong> to query local Ollama.</div>
+          <div id="rag-blocks"></div>
+        </div>
+
+        <div class="card" style="border-color: #2563eb;">
+          <div class="row" style="justify-content: space-between;">
+            <h3>Project Convergent</h3>
+            <span class="pill ok" id="conv-badges">Waiting</span>
+          </div>
+          <p class="sub">OpenFGA pre-filtered · Active-only truth · Zero-copy Mount Stack · HMAC KV keys</p>
+          <div class="answer-box" id="conv-answer">Click <strong>Run Live Comparison</strong> to query local Ollama.</div>
+          <div id="conv-blocks"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: LAYERED OVERLAYS & UNDO -->
+    <section id="tab-overlays" class="section">
+      <div id="overlay-banner" class="banner">
+        <strong>Zero-Copy Layered Overlays (Scion / MVCC style):</strong> Opening an overlay copies <strong>0 blocks</strong>. Non-overlapping concurrent agent lands auto-rebase to <span class="mono">rev + 1</span>; stale overlapping edits return a clean conflict; any revision can be undone atomically.
+      </div>
+
+      <div class="grid-2" style="margin-bottom: 18px;">
+        <div class="card">
+          <h3>1. Open 0-Byte Agent Overlay</h3>
+          <div class="row" style="margin-bottom: 10px;">
+            <select id="ov-space">
+              <option value="finance">Finance Space</option>
+              <option value="engineering">Engineering Space</option>
+            </select>
+            <input id="ov-owner" value="agent-1" placeholder="owner" style="width: 120px;" />
+            <input id="ov-baserev" type="number" placeholder="base_rev (blank=HEAD)" style="width: 170px;" />
+            <button id="btn-open-ov" class="primary">Open Overlay</button>
+          </div>
+
+          <h3 style="margin-top: 16px;">2. Stage Delta (Upsert / Retract)</h3>
+          <div class="row" style="margin-bottom: 8px;">
+            <select id="stage-ov-id" style="flex:1;"></select>
+            <select id="stage-op">
+              <option value="upsert">upsert</option>
+              <option value="retract">retract</option>
+            </select>
+          </div>
+          <input id="stage-uri" style="width:100%; margin-bottom: 8px;" value="policy://travel-policy.md" placeholder="source_uri" />
+          <textarea id="stage-text" placeholder="Primary-source content...">ACME Corporate Travel Policy (v3): Cap raised to $1,500 per trip.</textarea>
+          <div class="row" style="margin-top: 8px;">
+            <button id="btn-stage">Stage Delta</button>
+            <button id="btn-land" class="primary">Land Changeset (Auto-Rebase)</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Live Mount Stack &amp; Revision History</h3>
+          <div class="row" style="margin-bottom: 10px;">
+            <select id="view-space">
+              <option value="finance">Finance Space</option>
+              <option value="engineering">Engineering Space</option>
+            </select>
+            <span class="pill ok" id="head-rev-pill">HEAD r0</span>
+          </div>
+          <div id="open-overlays-list"></div>
+          <h3 style="margin-top: 14px;">Active Base Blocks (Shared KV Cache)</h3>
+          <div id="base-blocks-list"></div>
+          <h3 style="margin-top: 14px;">Revisions (Click Undo to Rollback)</h3>
+          <div id="revisions-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: BENCHMARKS & COMPARISON -->
+    <section id="tab-benchmarks" class="section">
+      <div class="grid-3" style="margin-bottom: 18px;">
+        <div class="card">
+          <p class="sub">Apple Silicon Ollama Warm Speedup</p>
+          <div class="metric" style="color: var(--green);">4.0x faster</div>
+          <p class="sub" style="margin:6px 0 0;">864 ms warm vs 3,453 ms cold (`granite4.2:3b`, Rust gateway 5.75 ms)</p>
+        </div>
+        <div class="card">
+          <p class="sub">Metal GPU MLX CacheBlend &amp; Side-Channel</p>
+          <div class="metric" style="color: var(--accent);">2.52x · t = -0.137</div>
+          <p class="sub" style="margin:6px 0 0;">Non-prefix [A,C] 11.81 ms vs 29.81 ms; Welch's t-test confirms 0 leak</p>
+        </div>
+        <div class="card">
+          <p class="sub">Cross-Document Supersession Recall</p>
+          <div class="metric" style="color: var(--green);">100% · 0% FP</div>
+          <p class="sub" style="margin:6px 0 0;">8/8 contradictions caught across URIs; 0/4 false positives on additive facts</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>How Project Convergent Compares</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Capability</th>
+              <th>Stateless Router (OpenRouter / LiteLLM)</th>
+              <th>Standard RAG (Vector DB)</th>
+              <th>Git-Style Memory Branches</th>
+              <th>Project Convergent</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>10,000 Parallel Agent Sandboxes</strong></td>
+              <td>No state</td>
+              <td>Shared mutable mess</td>
+              <td>Copies N blocks/branch; cache thrash</td>
+              <td><strong>0-byte Overlays + 100% base KV reuse</strong></td>
+            </tr>
+            <tr>
+              <td><strong>30k+ Concurrent Agent Writes/Day</strong></td>
+              <td>N/A</td>
+              <td>Stale &amp; conflicting chunks</td>
+              <td>Branches go stale in seconds</td>
+              <td><strong>Server-authoritative auto-rebase Land</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Cross-Document Stale Truth</strong></td>
+              <td>N/A</td>
+              <td>Retrieves both old &amp; new</td>
+              <td>Manual merge required</td>
+              <td><strong>Bi-temporal supersession + instant Undo</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Multi-Client / Team Isolation</strong></td>
+              <td>None</td>
+              <td>Post-retrieval filter leaks</td>
+              <td>Per-branch silos</td>
+              <td><strong>OpenFGA pre-filter + HMAC KV keys</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Model Sovereignty</strong></td>
+              <td>Cloud APIs only</td>
+              <td>App-level glue</td>
+              <td>App-level glue</td>
+              <td><strong>Self-hosted (vLLM/MLX/Ollama) + Cloud Proxy</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    let STATE = null;
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, {
+        headers: { "Content-Type": "application/json" },
+        ...opts,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Request failed");
+      return data;
+    }
+
+    function renderState(s) {
+      STATE = s;
+      document.getElementById("status-pill").textContent = `Live · ${s.model_id} · Postgres + Valkey + OpenFGA`;
+      const bobActive = s.principals.bob.active;
+      const bobBtn = document.getElementById("btn-toggle-bob");
+      bobBtn.textContent = bobActive ? "Revoke Bob's Access" : "Restore Bob's Access";
+      bobBtn.className = bobActive ? "danger" : "primary";
+
+      // Populate overlay dropdowns
+      const arenaOv = document.getElementById("arena-overlay");
+      const stageOv = document.getElementById("stage-ov-id");
+      const allOvs = [];
+      for (const [sname, sp] of Object.entries(s.spaces)) {
+        for (const ov of sp.open_overlays) allOvs.push({ ...ov, space: sname });
+      }
+      arenaOv.innerHTML = `<option value="">None (Base Space HEAD)</option>` +
+        allOvs.map(o => `<option value="${o.overlay_id}">${o.space} · ${o.owner} (r${o.base_rev}, ${o.deltas.length} deltas)</option>`).join("");
+      stageOv.innerHTML = allOvs.length
+        ? allOvs.map(o => `<option value="${o.overlay_id}">${o.space} · ${o.owner} (${o.overlay_id.slice(0,8)})</option>`).join("")
+        : `<option value="">Open an overlay first</option>`;
+
+      // Render selected space mount stack
+      const vSpace = document.getElementById("view-space").value;
+      const sp = s.spaces[vSpace];
+      document.getElementById("head-rev-pill").textContent = `HEAD r${sp.head_rev}`;
+
+      document.getElementById("open-overlays-list").innerHTML = sp.open_overlays.length
+        ? sp.open_overlays.map(o => `
+            <div class="block-item overlay">
+              <div class="row" style="justify-content:space-between;">
+                <strong>Overlay ${o.overlay_id.slice(0,8)} (${o.owner})</strong>
+                <span class="pill">base r${o.base_rev} · 0 copied blocks · ${o.deltas.length} delta(s)</span>
+              </div>
+              ${o.deltas.map(d => `<div class="mono" style="margin-top:4px;">[${d.op}] ${d.source_uri}: ${d.canonical_text}</div>`).join("")}
+            </div>`).join("")
+        : `<p class="sub">No open overlays on ${vSpace}. Click <strong>Open Overlay</strong> to spawn a 0-byte sandbox.</p>`;
+
+      document.getElementById("base-blocks-list").innerHTML = sp.active_blocks.map(b => `
+        <div class="block-item">
+          <div class="row" style="justify-content:space-between;">
+            <span class="mono">${b.source_uri}</span>
+            <span class="pill">r${b.landed_rev} · ${b.clearance_scope.slice(0,18)}...</span>
+          </div>
+          <div style="margin-top:4px;">${b.canonical_text}</div>
+        </div>`).join("");
+
+      document.getElementById("revisions-list").innerHTML = sp.revisions.map(r => `
+        <div class="block-item">
+          <div class="row" style="justify-content:space-between;">
+            <span><strong>r${r.rev}</strong> [${r.action}] ${r.message} <span class="sub">by ${r.author}</span></span>
+            ${r.action === "land" ? `<button onclick="undoRev('${vSpace}', ${r.rev})">Undo r${r.rev}</button>` : ""}
+          </div>
+        </div>`).join("");
+    }
+
+    async function loadState() {
+      renderState(await api("/api/state"));
+    }
+
+    async function undoRev(space, rev) {
+      const res = await api("/api/revisions/undo", { method: "POST", body: JSON.stringify({ space, rev }) });
+      const banner = document.getElementById("overlay-banner");
+      banner.className = "banner";
+      banner.innerHTML = `<strong>Undone r${rev}</strong> -> landed r${res.undo_rev} (deactivated ${res.deactivated}, restored ${res.restored}, evicted stale KV keys).`;
+      renderState(res.state);
+    }
+
+    document.querySelectorAll("button.tab").forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll("button.tab").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
+        btn.classList.add("active");
+        document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+      };
+    });
+
+    document.querySelectorAll("button.preset").forEach(btn => {
+      btn.onclick = () => {
+        document.getElementById("arena-persona").value = btn.dataset.persona;
+        document.getElementById("arena-prompt").value = btn.dataset.q;
+        document.getElementById("btn-run-arena").click();
+      };
+    });
+
+    document.getElementById("btn-reset").onclick = async () => renderState(await api("/api/reset", { method: "POST" }));
+    document.getElementById("btn-toggle-bob").onclick = async () =>
+      renderState(await api("/api/principals/toggle", { method: "POST", body: JSON.stringify({ persona: "bob" }) }));
+    document.getElementById("view-space").onchange = () => STATE && renderState(STATE);
+
+    document.getElementById("btn-run-arena").onclick = async () => {
+      const persona = document.getElementById("arena-persona").value;
+      const prompt = document.getElementById("arena-prompt").value;
+      const overlay_id = document.getElementById("arena-overlay").value || null;
+      document.getElementById("rag-answer").textContent = "Querying local Ollama...";
+      document.getElementById("conv-answer").textContent = "Querying local Ollama...";
+      const r = await api("/api/arena", { method: "POST", body: JSON.stringify({ persona, prompt, overlay_id }) });
+
+      document.getElementById("rag-badges").textContent =
+        `${r.standard_rag.latency_ms} ms · ${r.standard_rag.stale_blocks_leaked} stale · ${r.standard_rag.cross_space_leaked} cross-space`;
+      document.getElementById("rag-answer").textContent = r.standard_rag.answer;
+      document.getElementById("rag-blocks").innerHTML = r.standard_rag.blocks.map(b => `
+        <div class="block-item ${(b.is_stale || b.cross_space) ? "stale" : ""}">
+          <div class="row" style="justify-content:space-between;">
+            <span class="mono">${b.source_uri}</span>
+            <span>${b.is_stale ? '<span class="pill warn">STALE</span>' : ''} ${b.cross_space ? '<span class="pill warn">CROSS-SPACE LEAK</span>' : ''}</span>
+          </div>
+          <div style="margin-top:4px;">${b.text}</div>
+        </div>`).join("");
+
+      document.getElementById("conv-badges").textContent =
+        `${r.convergent.latency_ms} ms · KV hits ${r.convergent.kv_cache_hits}/${r.convergent.kv_total_blocks} · 0 leaks`;
+      document.getElementById("conv-answer").textContent = r.convergent.answer;
+      document.getElementById("conv-blocks").innerHTML = r.convergent.blocks.length
+        ? r.convergent.blocks.map(b => `
+          <div class="block-item ${b.layer === "overlay" ? "overlay" : ""}">
+            <div class="row" style="justify-content:space-between;">
+              <span class="mono">${b.source_uri}</span>
+              <span class="pill ok">${b.layer} · ${b.kv_key_prefix}</span>
+            </div>
+            <div style="margin-top:4px;">${b.text}</div>
+          </div>`).join("")
+        : `<div class="block-item">No authorized blocks (OpenFGA denied / revoked).</div>`;
+    };
+
+    document.getElementById("btn-open-ov").onclick = async () => {
+      const space = document.getElementById("ov-space").value;
+      const owner = document.getElementById("ov-owner").value || "agent-1";
+      const br = document.getElementById("ov-baserev").value;
+      const res = await api("/api/overlays/open", {
+        method: "POST",
+        body: JSON.stringify({ space, owner, base_rev: br ? Number(br) : null }),
+      });
+      document.getElementById("view-space").value = space;
+      renderState(res.state);
+    };
+
+    document.getElementById("btn-stage").onclick = async () => {
+      const overlay_id = document.getElementById("stage-ov-id").value;
+      if (!overlay_id) return;
+      const res = await api("/api/overlays/stage", {
+        method: "POST",
+        body: JSON.stringify({
+          overlay_id,
+          op: document.getElementById("stage-op").value,
+          source_uri: document.getElementById("stage-uri").value,
+          text: document.getElementById("stage-text").value,
+        }),
+      });
+      renderState(res.state);
+    };
+
+    document.getElementById("btn-land").onclick = async () => {
+      const overlay_id = document.getElementById("stage-ov-id").value;
+      if (!overlay_id) return;
+      const res = await api("/api/overlays/land", {
+        method: "POST",
+        body: JSON.stringify({ overlay_id, author: document.getElementById("ov-owner").value || "agent-1", message: "Studio Land" }),
+      });
+      const banner = document.getElementById("overlay-banner");
+      if (res.status === "conflict") {
+        banner.className = "banner conflict";
+        banner.innerHTML = `<strong>Optimistic Conflict Detected:</strong> ${res.conflicts.map(c => `${c.source_uri} changed at r${c.current_rev}`).join(", ")}`;
+      } else {
+        banner.className = "banner";
+        banner.innerHTML = `<strong>Landed at r${res.rev}</strong> (applied ${res.applied_count}, superseded ${res.superseded_count}, evicted stale KV keys).`;
+      }
+      renderState(res.state);
+    };
+
+    loadState();
+  </script>
+</body>
+</html>

@@ -1,53 +1,63 @@
-  # Project Convergent
+# Project Convergent
 
-  **The local-first World-State & Execution Plane for multi-agent teams.**
+**The local-first World-State & Execution Plane for multi-agent teams.**
 
-  Own your versioned institutional memory and context boundaries; swap any self-hosted (`vLLM`, `SGLang`, `MLX`, `Ollama`) or cloud (`OpenAI`, `Anthropic`) model underneath.
+Own your versioned institutional memory and context boundaries; swap any self-hosted (`vLLM`, `SGLang`, `MLX`, `Ollama`) or cloud (`OpenAI`, `Anthropic`) model underneath.
 
-  ## Documentation
-  - **[Manifesto & Philosophy](docs/manifesto.md)** — Why tokens → `$0`, why Git-style branching breaks at agent scale, and what survives in the AGI era.
-  - **[Architecture](docs/architecture.md)** — Layered Overlays (`open_overlay`, `stage_delta`, `land_overlay`, `undo_revision`), Mount Stacks, MCP/HTTP API, and the Inference
-  Backend Factory.
-  - **[Verified Benchmarks](docs/benchmarks.md)** — Real Apple Silicon Metal (`MLX`), local Ollama (`granite4.2:3b`), and semantic supersession benchmark results.
+## Documentation
+- **[Manifesto & Philosophy](docs/manifesto.md)** — Why tokens → `$0`, why Git-style branching breaks at agent scale, and what survives in the AGI era.
+- **[Architecture](docs/architecture.md)** — Layered Overlays (`open_overlay`, `stage_delta`, `land_overlay`, `undo_revision`), Mount Stacks, MCP/HTTP API, and the Inference Backend Factory.
+- **[Verified Benchmarks](docs/benchmarks.md)** — Real Apple Silicon Metal (`MLX`), local Ollama (`granite4.2:3b`), and semantic supersession benchmark results.
 
-  ---
+---
 
-  ## Quickstart (Disposable Demo on macOS Apple Silicon)
+## Interactive MVP Studio (Web GUI)
 
-  Requires Docker and local Ollama (`granite4.2:3b`). Spawns isolated disposable containers, runs all predefined fixtures end-to-end, and cleans up with `0` leftover
-  containers:
+Launch **Convergent Studio** (`http://127.0.0.1:8095`) to explore Layered Overlays, Mount Stacks, instant Undo, and a live side-by-side **Standard RAG vs. Project Convergent** arena powered by local Ollama (`granite4.2:3b`):
 
-  ```bash
-  cd worker-py && uv run python ../examples/demo_convergent.py
+```bash
+cd worker-py && uv run python ../studio/server.py
+```
 
-Local Development Stack
+## Quickstart (Disposable CLI Demo on macOS Apple Silicon)
 
-  # 1. Start PostgreSQL 17 (ParadeDB), Valkey 8, OpenFGA 1.8.5, and NATS JetStream
-  docker compose -f deploy/compose.yml up -d
+Requires Docker and local Ollama (`granite4.2:3b`). Spawns isolated disposable containers, runs all predefined fixtures end-to-end, and cleans up with `0` leftover containers:
 
-  # 2. Run idempotent Postgres, OpenFGA, and NATS JetStream migrations
-  cd worker-py && uv run python ../scripts/bootstrap.py
+```bash
+cd worker-py && uv run python ../examples/demo_convergent.py
+```
 
-  # 3. Start the async worker daemon (terminal 1)
-  uv run convergent-worker
+## Local Development Stack
 
-  # 4. Start the Rust gateway with your chosen backend (terminal 2)
-  cd ../gateway-rs
-  CONVERGENT_INFERENCE_BACKEND=ollama CONVERGENT_VLLM_URL=http://127.0.0.1:11434 CONVERGENT_MODEL_ID=granite4.2:3b cargo run
+```bash
+# 1. Start PostgreSQL 17 (ParadeDB), Valkey 8, OpenFGA 1.8.5, and NATS JetStream
+docker compose -f deploy/compose.yml up -d
 
-Switch backends anytime via CONVERGENT_INFERENCE_BACKEND: vllm (cuda), sglang, mlx, ollama, openai, anthropic, or dev (see docs/architecture.md).
+# 2. Run idempotent Postgres, OpenFGA, and NATS JetStream migrations
+cd worker-py && uv run python ../scripts/bootstrap.py
 
-Running Tests & Benchmarks
+# 3. Start the async worker daemon (terminal 1)
+uv run convergent-worker
 
-  # Rust gateway unit + integration suites
-  cd gateway-rs && cargo test -- --nocapture
+# 4. Start the Rust gateway with your chosen backend (terminal 2)
+cd ../gateway-rs
+CONVERGENT_INFERENCE_BACKEND=ollama CONVERGENT_VLLM_URL=http://127.0.0.1:11434 CONVERGENT_MODEL_ID=granite4.2:3b cargo run
+```
 
-  # Python worker + overlay MVCC + E2E suites
-  cd worker-py && uv run pytest -v
+Switch backends anytime via `CONVERGENT_INFERENCE_BACKEND`: `vllm` (`cuda`), `sglang`, `mlx`, `ollama`, `openai`, `anthropic`, or `dev` (see [docs/architecture.md](docs/architecture.md)).
 
- 	# Apple Silicon Metal GPU (MLX) KV-cache & Welch's t-test side-channel proof
-  python3 benchmarks/mlx_kv_cache_bench.py
+## Running Tests & Benchmarks
 
-  # Cross-document semantic supersession benchmark (Ollama granite4.2:3b)
-  cd worker-py && uv run python ../benchmarks/semantic_supersession_bench.py
+```bash
+# Rust gateway unit + integration suites
+cd gateway-rs && cargo test -- --nocapture
 
+# Python worker + overlay MVCC + E2E suites
+cd worker-py && uv run pytest -v
+
+# Apple Silicon Metal GPU (MLX) KV-cache & Welch's t-test side-channel proof
+python3 benchmarks/mlx_kv_cache_bench.py
+
+# Cross-document semantic supersession benchmark (Ollama granite4.2:3b)
+cd worker-py && uv run python ../benchmarks/semantic_supersession_bench.py
+```
