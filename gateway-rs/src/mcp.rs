@@ -9,8 +9,8 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use crate::app::{extract_claims, AppState};
-use crate::branches::{commit_to_branch, create_branch, diff_branches, merge_branch, revert_commit};
-use crate::retrieval::prefiltered_hybrid_search_branch;
+use crate::overlays::{apply_overlay_to_blocks, inspect_overlay, land_overlay, open_overlay, stage_delta, undo_revision};
+use crate::retrieval::prefiltered_hybrid_search;
 
 /// Standard MCP Streamable HTTP JSON-RPC 2.0 endpoint (`POST /mcp`).
 pub async fn handle_mcp(
@@ -41,14 +41,14 @@ pub async fn handle_mcp(
         "tools/list" => Ok(json!({
             "tools": [
                 { "name": "list_spaces", "description": "List authorized Context Spaces", "inputSchema": { "type": "object", "properties": {} } },
-                { "name": "search_memory", "description": "Pre-filtered hybrid search over authorized Knowledge Blocks (branch-aware)", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" }, "space_id": { "type": "string" }, "branch": { "type": "string" }, "top_k": { "type": "integer" } }, "required": ["query"] } },
+                { "name": "search_memory", "description": "Pre-filtered hybrid search over authorized Knowledge Blocks (supports zero-copy overlay_id)", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" }, "space_id": { "type": "string" }, "overlay_id": { "type": "string" }, "top_k": { "type": "integer" } }, "required": ["query"] } },
                 { "name": "get_block", "description": "Fetch a single authorized Knowledge Block by ID", "inputSchema": { "type": "object", "properties": { "block_id": { "type": "string" } }, "required": ["block_id"] } },
                 { "name": "ingest_note", "description": "Enqueue a new note/document for Smart Memory distillation", "inputSchema": { "type": "object", "properties": { "space_id": { "type": "string" }, "source_uri": { "type": "string" }, "content": { "type": "string" } }, "required": ["space_id", "source_uri", "content"] } },
-                { "name": "branch_memory", "description": "Create an isolated world-state memory branch from an existing branch", "inputSchema": { "type": "object", "properties": { "space_id": { "type": "string" }, "new_branch": { "type": "string" }, "from_branch": { "type": "string" } }, "required": ["space_id", "new_branch"] } },
-                { "name": "commit_memory", "description": "Commit primary-source content to a specific memory branch", "inputSchema": { "type": "object", "properties": { "space_id": { "type": "string" }, "branch_name": { "type": "string" }, "source_uri": { "type": "string" }, "content": { "type": "string" }, "message": { "type": "string" } }, "required": ["space_id", "source_uri", "content"] } },
-                { "name": "diff_memory", "description": "Semantic diff between two world-state branches", "inputSchema": { "type": "object", "properties": { "space_id": { "type": "string" }, "source_branch": { "type": "string" }, "target_branch": { "type": "string" } }, "required": ["space_id", "source_branch"] } },
-                { "name": "merge_memory", "description": "Atomically merge a memory branch into target (default main) and evict stale KV", "inputSchema": { "type": "object", "properties": { "space_id": { "type": "string" }, "source_branch": { "type": "string" }, "target_branch": { "type": "string" }, "message": { "type": "string" } }, "required": ["space_id", "source_branch"] } },
-                { "name": "revert_memory", "description": "Instantly revert a memory commit and restore superseded blocks", "inputSchema": { "type": "object", "properties": { "space_id": { "type": "string" }, "branch_name": { "type": "string" }, "commit_id": { "type": "string" } }, "required": ["space_id", "commit_id"] } }
+                { "name": "open_overlay", "description": "Open a 0-byte virtual overlay pinned to a Space revision", "inputSchema": { "type": "object", "properties": { "space_id": { "type": "string" }, "base_rev": { "type": "integer" } }, "required": ["space_id"] } },
+                { "name": "stage_delta", "description": "Stage an upsert or retract delta inside an open overlay", "inputSchema": { "type": "object", "properties": { "overlay_id": { "type": "string" }, "source_uri": { "type": "string" }, "content": { "type": "string" }, "op": { "type": "string" } }, "required": ["overlay_id", "source_uri"] } },
+                { "name": "inspect_overlay", "description": "Inspect staged deltas inside an overlay", "inputSchema": { "type": "object", "properties": { "overlay_id": { "type": "string" } }, "required": ["overlay_id"] } },
+                { "name": "land_overlay", "description": "Atomically land an overlay changeset with optimistic concurrency auto-rebase & KV eviction", "inputSchema": { "type": "object", "properties": { "overlay_id": { "type": "string" }, "message": { "type": "string" }, "force": { "type": "boolean" } }, "required": ["overlay_id"] } },
+                { "name": "undo_revision", "description": "Atomically undo a landed Space revision and restore superseded blocks", "inputSchema": { "type": "object", "properties": { "space_id": { "type": "string" }, "rev": { "type": "integer" } }, "required": ["space_id", "rev"] } }
             ]
         })),
         "tools/call" => {
@@ -117,14 +117,16 @@ async fn dispatch_tool(
                 .get("space_id")
                 .and_then(|v| v.as_str())
                 .and_then(|s| Uuid::parse_str(s).ok());
-            let branch = args.get("branch").and_then(|v| v.as_str()).unwrap_or("main");
+            let overlay_id = args
+                .get("overlay_id")
+                .and_then(|v| v.as_str())
+                .and_then(|s| Uuid::parse_str(s).ok());
             let top_k = args.get("top_k").and_then(|v| v.as_i64()).unwrap_or(5);
 
-            let blocks = prefiltered_hybrid_search_branch(
+            let mut blocks = prefiltered_hybrid_search(
                 &state.pool,
                 claims.org_id,
                 space_id,
-                branch,
                 &allowed_docs,
                 query,
                 None,
@@ -132,6 +134,11 @@ async fn dispatch_tool(
             )
             .await
             .map_err(|e| e.to_string())?;
+            if let Some(oid) = overlay_id {
+                blocks = apply_overlay_to_blocks(&state.pool, oid, blocks)
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
 
             Ok(json!({
                 "content": [{ "type": "text", "text": serde_json::to_string(&blocks).unwrap() }],
@@ -189,66 +196,54 @@ async fn dispatch_tool(
             .map_err(|e| e.to_string())?;
             Ok(json!({ "content": [{ "type": "text", "text": "enqueued" }], "status": "enqueued" }))
         }
-        "branch_memory" => {
+        "open_overlay" => {
             let sid = parse_uuid_arg(args, "space_id")?;
-            let new_branch = args.get("new_branch").and_then(|v| v.as_str()).ok_or("missing new_branch")?;
-            let from_branch = args.get("from_branch").and_then(|v| v.as_str()).unwrap_or("main");
-            let cid = create_branch(&state.pool, claims.org_id, sid, new_branch, from_branch, &claims.sub)
+            let base_rev = args.get("base_rev").and_then(|v| v.as_i64());
+            let res = open_overlay(&state.pool, claims.org_id, sid, &claims.sub, base_rev)
                 .await
                 .map_err(|e| e.to_string())?;
-            let res = json!({ "branch": new_branch, "from_branch": from_branch, "commit_id": cid });
-            Ok(json!({ "content": [{ "type": "text", "text": res.to_string() }], "result": res }))
+            Ok(json!({ "content": [{ "type": "text", "text": res.to_string() }], "overlay": res }))
         }
-        "commit_memory" => {
-            let sid = parse_uuid_arg(args, "space_id")?;
-            let branch = args.get("branch_name").and_then(|v| v.as_str()).unwrap_or("main");
+        "stage_delta" => {
+            let oid = parse_uuid_arg(args, "overlay_id")?;
             let source_uri = args.get("source_uri").and_then(|v| v.as_str()).ok_or("missing source_uri")?;
-            let content = args.get("content").and_then(|v| v.as_str()).ok_or("missing content")?;
-            let message = args.get("message").and_then(|v| v.as_str()).unwrap_or("MCP commit");
-            let res = commit_to_branch(
+            let content = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            let op = args.get("op").and_then(|v| v.as_str()).unwrap_or("upsert");
+            let res = stage_delta(&state.pool, oid, source_uri, content, op)
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(json!({ "content": [{ "type": "text", "text": res.to_string() }], "delta": res }))
+        }
+        "inspect_overlay" => {
+            let oid = parse_uuid_arg(args, "overlay_id")?;
+            let res = inspect_overlay(&state.pool, oid).await.map_err(|e| e.to_string())?;
+            Ok(json!({ "content": [{ "type": "text", "text": res.to_string() }], "overlay": res }))
+        }
+        "land_overlay" => {
+            let oid = parse_uuid_arg(args, "overlay_id")?;
+            let message = args.get("message").and_then(|v| v.as_str()).unwrap_or("Land overlay");
+            let force = args.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
+            let res = land_overlay(
                 &state.pool,
                 &state.openfga,
                 &state.openfga_store_id,
                 &mut valkey,
-                claims.org_id,
-                sid,
-                branch,
-                source_uri,
-                content,
+                oid,
                 &claims.sub,
                 message,
+                force,
             )
             .await
             .map_err(|e| e.to_string())?;
-            Ok(json!({ "content": [{ "type": "text", "text": res.to_string() }], "result": res }))
+            Ok(json!({ "content": [{ "type": "text", "text": res.to_string() }], "land": res }))
         }
-        "diff_memory" => {
+        "undo_revision" => {
             let sid = parse_uuid_arg(args, "space_id")?;
-            let src = args.get("source_branch").and_then(|v| v.as_str()).ok_or("missing source_branch")?;
-            let tgt = args.get("target_branch").and_then(|v| v.as_str()).unwrap_or("main");
-            let res = diff_branches(&state.pool, claims.org_id, sid, src, tgt)
+            let rev = args.get("rev").and_then(|v| v.as_i64()).ok_or("missing rev")?;
+            let res = undo_revision(&state.pool, claims.org_id, sid, rev, &claims.sub)
                 .await
                 .map_err(|e| e.to_string())?;
-            Ok(json!({ "content": [{ "type": "text", "text": res.to_string() }], "diff": res }))
-        }
-        "merge_memory" => {
-            let sid = parse_uuid_arg(args, "space_id")?;
-            let src = args.get("source_branch").and_then(|v| v.as_str()).ok_or("missing source_branch")?;
-            let tgt = args.get("target_branch").and_then(|v| v.as_str()).unwrap_or("main");
-            let msg = args.get("message").and_then(|v| v.as_str());
-            let res = merge_branch(&state.pool, claims.org_id, sid, src, tgt, &claims.sub, msg)
-                .await
-                .map_err(|e| e.to_string())?;
-            Ok(json!({ "content": [{ "type": "text", "text": res.to_string() }], "merge": res }))
-        }
-        "revert_memory" => {
-            let sid = parse_uuid_arg(args, "space_id")?;
-            let branch = args.get("branch_name").and_then(|v| v.as_str()).unwrap_or("main");
-            let cid = parse_uuid_arg(args, "commit_id")?;
-            let res = revert_commit(&state.pool, claims.org_id, sid, branch, cid, &claims.sub)
-                .await
-                .map_err(|e| e.to_string())?;
-            Ok(json!({ "content": [{ "type": "text", "text": res.to_string() }], "revert": res }))
+            Ok(json!({ "content": [{ "type": "text", "text": res.to_string() }], "undo": res }))
         }
         other => Err(format!("unknown tool: {other}")),
     }

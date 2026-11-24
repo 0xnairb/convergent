@@ -3,9 +3,9 @@
 Clean-slate **Sovereign Cognitive Engine** for enterprises running open-weight LLMs in customer VPCs.
 
 ## Core Pillars (AGI-Era Focus)
-- **Git-for-World-State ([branches.py](worker-py/src/convergent_worker/branches.py), [003_world_state_branches.sql](migrations/003_world_state_branches.sql)):** `branch`, `commit`, `diff`, `merge`, `revert`, and bi-temporal `as_of` replay over primary sources & explicit decisions in single-ACID `PostgreSQL 17`.
-- **Multiplayer Shared Spaces + Hard Isolation:** Private developer/agent branches, shared team `main` brain with real-time NATS merge broadcasts, and deterministic `OpenFGA` + per-branch/per-space `HMAC-SHA256` KV isolation.
-- **Hybrid Inference & Smart Cache Base:** Pluggable backend factory running the exact same Brain across self-hosted (`vLLM`/`SGLang` CUDA, `MLX`/`Ollama` Apple Silicon) and cloud proxies (`OpenAI` `prompt_cache_key`, `Anthropic` `cache_control: ephemeral`), with atomic KV eviction & pre-warming on merge/revert.
+- **Layered Overlays & Server-Authoritative Changesets ([overlays.py](worker-py/src/convergent_worker/overlays.py), [overlays.rs](gateway-rs/src/overlays.rs), [003_world_state_overlays.sql](migrations/003_world_state_overlays.sql)):** Zero-copy `open_overlay` sandboxes (`0` copied blocks), `stage_delta`, optimistic auto-rebase `land_overlay` (for 30k+ concurrent agent ops/day), instant `undo_revision`, and bi-temporal `as_of` replay in single-ACID `PostgreSQL 17`.
+- **Multiplayer Shared Spaces + Hard Isolation:** Mountable shared team spaces + private 0-byte agent overlays (`X-Convergent-Overlay`), deterministic `OpenFGA` pre-filtering, and per-scope `HMAC-SHA256` KV isolation (100% base KV reuse across concurrent agents).
+- **Hybrid Inference & Smart Cache Base:** Pluggable backend factory running the exact same Brain across self-hosted (`vLLM`/`SGLang` CUDA, `MLX`/`Ollama` Apple Silicon) and cloud proxies (`OpenAI` `prompt_cache_key`, `Anthropic` `cache_control: ephemeral`), with targeted KV eviction & pre-warming on `land`/`undo`.
 - **Hot Data Plane (`gateway-rs`):** Rust (`Axum`) serving **MCP Streamable HTTP (`/mcp`)** with **OAuth 2.1 + PKCE (`S256`)**, **OpenAI-compatible `/v1/chat/completions`**, `/v1/spaces/{space_id}/grants`, and `/v1/memory/history`.
 
 ## Pluggable Inference Backend Factory (`CONVERGENT_INFERENCE_BACKEND`)

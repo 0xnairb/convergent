@@ -24,7 +24,8 @@ use crate::inference::get_active_model;
 use crate::mcp::handle_mcp;
 use crate::oauth::{issue_jwt, verify_jwt, verify_pkce_s256, Claims};
 use crate::openfga::OpenFgaClient;
-use crate::retrieval::prefiltered_hybrid_search_branch;
+use crate::overlays::apply_overlay_to_blocks;
+use crate::retrieval::prefiltered_hybrid_search;
 
 #[derive(Clone)]
 pub struct PkceAuthCode {
@@ -163,11 +164,10 @@ async fn chat_completions(
         .get("x-convergent-space")
         .and_then(|v| v.to_str().ok())
         .and_then(|s| Uuid::parse_str(s).ok());
-    let branch_name = headers
-        .get("x-convergent-branch")
+    let overlay_id = headers
+        .get("x-convergent-overlay")
         .and_then(|v| v.to_str().ok())
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or("main");
+        .and_then(|s| Uuid::parse_str(s).ok());
 
     let mut blocks = vec![];
     if let Some(sid) = space_id {
@@ -191,11 +191,10 @@ async fn chat_completions(
             .and_then(|c| c.as_str())
             .unwrap_or("");
         if !query.is_empty() {
-            if let Ok(found) = prefiltered_hybrid_search_branch(
+            if let Ok(found) = prefiltered_hybrid_search(
                 &state.pool,
                 claims.org_id,
                 Some(sid),
-                branch_name,
                 &allowed,
                 query,
                 None,
@@ -205,6 +204,11 @@ async fn chat_completions(
             {
                 blocks = found;
             }
+        }
+    }
+    if let Some(oid) = overlay_id {
+        if let Ok(composed) = apply_overlay_to_blocks(&state.pool, oid, blocks.clone()).await {
+            blocks = composed;
         }
     }
 
@@ -270,8 +274,10 @@ async fn chat_completions(
     resp.headers_mut().insert("content-type", content_type);
     resp.headers_mut()
         .insert("x-convergent-backend", HeaderValue::from_static(state.backend.name()));
-    if let Ok(hv) = HeaderValue::from_str(branch_name) {
-        resp.headers_mut().insert("x-convergent-branch", hv);
+    if let Some(oid) = overlay_id {
+        if let Ok(hv) = HeaderValue::from_str(&oid.to_string()) {
+            resp.headers_mut().insert("x-convergent-overlay", hv);
+        }
     }
     if let Some(hits) = cache_hits_hdr {
         resp.headers_mut().insert("x-convergent-cache-hits", hits);

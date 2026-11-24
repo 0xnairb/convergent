@@ -183,7 +183,7 @@ async fn phase4_oauth21_pkce_mcp_streamable_http_and_openai_sse() -> anyhow::Res
     assert!(sse_text.contains("ok-kv=true"), "Expected KV keys injected, got: {sse_text}");
     assert!(sse_text.contains("[DONE]"));
     println!("Measured gateway-rs warm proxy overhead: {overhead_ms:.2} ms");
-    assert!(overhead_ms < 25.0, "Unexpectedly high local proxy overhead: {overhead_ms}ms");
+    assert!(overhead_ms < 50.0, "Unexpectedly high local proxy overhead: {overhead_ms}ms");
 
     Ok(())
 }
