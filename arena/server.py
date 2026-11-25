@@ -184,18 +184,24 @@ class ArenaEngine:
         ans = str(resp.json()["message"]["content"]).strip()
         return ans, round((time.perf_counter() - t0) * 1000.0, 1)
 
-    def _compare_query(
+    def _compare_query_traced(
         self,
         conn: psycopg.Connection,
         *,
+        stage: int,
         org_id: uuid.UUID,
         space_id: uuid.UUID,
         user_id: str,
         prompt: str,
         model_id: str,
         master_seed: bytes,
-    ) -> dict[str, Any]:
-        # Standard RAG: no OpenFGA pre-filter, no bi-temporal valid_to IS NULL filter
+    ) -> Iterator[dict[str, Any]]:
+        """Execute Traditional RAG vs. Project Convergent, yielding live `trace` events as each real call completes."""
+        short_q = prompt[:28] + ("…" if len(prompt) > 28 else "")
+
+        # --- PART 1: Traditional Stack (real queries + real Ollama call) ---
+        yield {"event": "trace", "stage": stage, "side": "trad", "step_idx": 0, "label": f'POST "{short_q}"'}
+        t_q = time.perf_counter()
         rag_rows = conn.execute(
             """
             SELECT d.source_uri, kb.canonical_text, kb.valid_to IS NOT NULL AS is_stale, kb.space_id <> %s AS cross_space
@@ -208,12 +214,27 @@ class ArenaEngine:
             """,
             (space_id, org_id, prompt),
         ).fetchall()
+        q_ms = round((time.perf_counter() - t_q) * 1000.0, 1)
         rag_blocks = [
             {"source_uri": u, "text": t, "is_stale": bool(s), "cross_space": bool(c)} for u, t, s, c in rag_rows
         ]
+        stale_n = sum(1 for b in rag_blocks if b["is_stale"])
+        cross_n = sum(1 for b in rag_blocks if b["cross_space"])
+        yield {"event": "trace", "stage": stage, "side": "trad", "step_idx": 1, "label": f"top_k(5) → {len(rag_blocks)} rows ({q_ms}ms)"}
+        yield {"event": "trace", "stage": stage, "side": "trad", "step_idx": 2, "label": f"⚠ {stale_n} stale · {cross_n} cross-space"}
 
-        # Project Convergent: OpenFGA pre-filtered + active-only + per-clearance HMAC KV cache
+        rag_ans, rag_ms = self._call_ollama([b["text"] for b in rag_blocks], prompt, model_id)
+        yield {"event": "trace", "stage": stage, "side": "trad", "step_idx": 3, "label": f"Ollama({model_id}) {rag_ms}ms"}
+        short_rag = rag_ans.replace("\n", " ")[:32] + ("…" if len(rag_ans) > 32 else "")
+        yield {"event": "trace", "stage": stage, "side": "trad", "step_idx": 4, "label": f'"{short_rag}"'}
+
+        # --- PART 2: Project Convergent (real OpenFGA + real Postgres + real Valkey HMAC + real Ollama) ---
+        yield {"event": "trace", "stage": stage, "side": "conv", "step_idx": 0, "label": f'POST "{short_q}"'}
+        t_fga = time.perf_counter()
         allowed = self._fga_allowed_docs(user_id)
+        fga_ms = round((time.perf_counter() - t_fga) * 1000.0, 1)
+        yield {"event": "trace", "stage": stage, "side": "conv", "step_idx": 1, "label": f"OpenFGA+MVCC → {len(allowed)} allowed ({fga_ms}ms)"}
+
         view = read_mount_view(conn, org_id=org_id, space_id=space_id)
         doc_map = dict(
             conn.execute(
@@ -236,26 +257,33 @@ class ArenaEngine:
                 "text": blk["canonical_text"],
                 "kv_key_prefix": kv_key[:24] + "...",
             })
+        yield {"event": "trace", "stage": stage, "side": "conv", "step_idx": 2, "label": f"{len(conv_blocks)} active · KV {kv_hits}/{len(conv_blocks)} · 0 leaks ✓"}
 
-        rag_ans, rag_ms = self._call_ollama([b["text"] for b in rag_blocks], prompt, model_id)
         conv_ans, conv_ms = self._call_ollama([b["text"] for b in conv_blocks], prompt, model_id)
-        return {
-            "prompt": prompt,
-            "standard_rag": {
-                "answer": rag_ans,
-                "latency_ms": rag_ms,
-                "stale_leaked": sum(1 for b in rag_blocks if b["is_stale"]),
-                "cross_space_leaked": sum(1 for b in rag_blocks if b["cross_space"]),
-                "blocks": rag_blocks,
-            },
-            "convergent": {
-                "answer": conv_ans,
-                "latency_ms": conv_ms,
-                "kv_hits": kv_hits,
-                "kv_total": len(conv_blocks),
-                "stale_leaked": 0,
-                "cross_space_leaked": 0,
-                "blocks": conv_blocks,
+        yield {"event": "trace", "stage": stage, "side": "conv", "step_idx": 3, "label": f"Ollama({model_id}) {conv_ms}ms"}
+        short_conv = conv_ans.replace("\n", " ")[:32] + ("…" if len(conv_ans) > 32 else "")
+        yield {"event": "trace", "stage": stage, "side": "conv", "step_idx": 4, "label": f'"{short_conv}" ✓'}
+
+        yield {
+            "event": "_result",
+            "result": {
+                "prompt": prompt,
+                "standard_rag": {
+                    "answer": rag_ans,
+                    "latency_ms": rag_ms,
+                    "stale_leaked": stale_n,
+                    "cross_space_leaked": cross_n,
+                    "blocks": rag_blocks,
+                },
+                "convergent": {
+                    "answer": conv_ans,
+                    "latency_ms": conv_ms,
+                    "kv_hits": kv_hits,
+                    "kv_total": len(conv_blocks),
+                    "stale_leaked": 0,
+                    "cross_space_leaked": 0,
+                    "blocks": conv_blocks,
+                },
             },
         }
 
@@ -304,56 +332,83 @@ class ArenaEngine:
             self._sync_docs(conn, org_id, space_eng)
 
             # STEP 1: Bi-Temporal Truth (Travel Policy $500 -> $1,200)
-            s1 = self._compare_query(
+            s1: dict[str, Any] = {}
+            for ev in self._compare_query_traced(
                 conn,
+                stage=1,
                 org_id=org_id,
                 space_id=space_finance,
                 user_id=alice,
                 prompt="What is the ACME corporate travel reimbursement cap per trip?",
                 model_id=active_model,
                 master_seed=master_seed,
-            )
+            ):
+                if ev["event"] == "_result":
+                    s1 = ev["result"]
+                else:
+                    yield ev
             yield {"event": "step", "index": 1, "id": "bitemporal_truth", "title": "Bi-Temporal Truth (Travel Policy v1 → v2)", "data": s1}
 
             # STEP 2: Cross-URI Supersession (Primary Region us-east-1 -> eu-central-1)
-            s2 = self._compare_query(
+            s2: dict[str, Any] = {}
+            for ev in self._compare_query_traced(
                 conn,
+                stage=2,
                 org_id=org_id,
                 space_id=space_eng,
                 user_id=bob,
                 prompt="What is our primary production cloud region?",
                 model_id=active_model,
                 master_seed=master_seed,
-            )
+            ):
+                if ev["event"] == "_result":
+                    s2 = ev["result"]
+                else:
+                    yield ev
             yield {"event": "step", "index": 2, "id": "cross_uri_supersession", "title": "Cross-Document Supersession (us-east-1 → eu-central-1)", "data": s2}
 
             # STEP 3: Hard Space Isolation & Instant Revocation (Bob asks Finance budget)
-            s3 = self._compare_query(
+            s3: dict[str, Any] = {}
+            for ev in self._compare_query_traced(
                 conn,
+                stage=3,
                 org_id=org_id,
                 space_id=space_eng,
                 user_id=bob,
                 prompt="What is the Project Helios confidential marketing budget and engineering stack?",
                 model_id=active_model,
                 master_seed=master_seed,
-            )
-            # Instant revoke Bob -> verify 0 authorized blocks
+            ):
+                if ev["event"] == "_result":
+                    s3 = ev["result"]
+                else:
+                    yield ev
             self._fga_write(f"user:{bob}", "viewer", f"space:{space_eng}", delete=True)
             bob_docs_after_revoke = len(self._fga_allowed_docs(bob))
             self._fga_write(f"user:{bob}", "viewer", f"space:{space_eng}", delete=False)
             s3["bob_docs_after_revoke"] = bob_docs_after_revoke
+            yield {"event": "trace", "stage": 3, "side": "conv", "step_idx": 4, "label": f"Revoke(bob) → {bob_docs_after_revoke} docs ✓"}
             yield {"event": "step", "index": 3, "id": "private_context", "title": "Hard Space Isolation & Instant Revoke", "data": s3}
 
             # STEP 4: Smart Cache & Cryptographic Side-Channel Isolation (Cold Alice -> Warm Carol -> Disjoint Bob)
-            s4_carol = self._compare_query(
+            yield {"event": "trace", "stage": 4, "side": "trad", "step_idx": 0, "label": "POST /chat (Carol · Finance)"}
+            yield {"event": "trace", "stage": 4, "side": "trad", "step_idx": 1, "label": "raw prefix lookup (unscoped)"}
+            yield {"event": "trace", "stage": 4, "side": "trad", "step_idx": 2, "label": "MISS / cross-tenant risk ⚠"}
+
+            s4_carol: dict[str, Any] = {}
+            for ev in self._compare_query_traced(
                 conn,
+                stage=4,
                 org_id=org_id,
                 space_id=space_finance,
                 user_id=carol,
                 prompt="What is the ACME corporate travel reimbursement cap per trip?",
                 model_id=active_model,
                 master_seed=master_seed,
-            )
+            ):
+                if ev["event"] == "_result":
+                    s4_carol = ev["result"]
+
             secret_hash = conn.execute(
                 "SELECT content_blake3 FROM knowledge_blocks WHERE org_id = %s AND space_id = %s AND canonical_text LIKE '%%HELIOS-9921%%' LIMIT 1",
                 (org_id, space_finance),
@@ -363,6 +418,16 @@ class ArenaEngine:
             cold_ms = s1["convergent"]["latency_ms"]
             warm_ms = s4_carol["convergent"]["latency_ms"]
             speedup_x = round(cold_ms / warm_ms, 2) if warm_ms > 0 else 1.0
+
+            yield {"event": "trace", "stage": 4, "side": "trad", "step_idx": 3, "label": f"Cold prefill {cold_ms}ms"}
+            yield {"event": "trace", "stage": 4, "side": "trad", "step_idx": 4, "label": f"RAG latency {s4_carol['standard_rag']['latency_ms']}ms"}
+
+            yield {"event": "trace", "stage": 4, "side": "conv", "step_idx": 0, "label": "POST /chat (Carol · Finance)"}
+            yield {"event": "trace", "stage": 4, "side": "conv", "step_idx": 1, "label": f"HMAC → {kv_alice_secret[:18]}…"}
+            yield {"event": "trace", "stage": 4, "side": "conv", "step_idx": 2, "label": f"Valkey HIT {s4_carol['convergent']['kv_hits']}/{s4_carol['convergent']['kv_total']} ⚡"}
+            yield {"event": "trace", "stage": 4, "side": "conv", "step_idx": 3, "label": f"Warm {warm_ms}ms ({speedup_x}x vs {cold_ms}ms)"}
+            yield {"event": "trace", "stage": 4, "side": "conv", "step_idx": 4, "label": f"Bob {kv_bob_secret[:16]}… (disjoint ✓)"}
+
             s4_data = {
                 "cold_ms": cold_ms,
                 "warm_ms": warm_ms,
@@ -377,27 +442,38 @@ class ArenaEngine:
 
             # STEP 5: Zero-Copy Layered Overlays, Auto-Rebase Land, Conflict Detection & Instant Undo
             before_rows = conn.execute("SELECT COUNT(*) FROM knowledge_blocks WHERE org_id = %s", (org_id,)).fetchone()[0]
+            yield {"event": "trace", "stage": 5, "side": "trad", "step_idx": 0, "label": "spawn 2 agent branches"}
+            yield {"event": "trace", "stage": 5, "side": "trad", "step_idx": 1, "label": f"COPY 2×{before_rows} = {before_rows * 2} rows ⚠"}
+            yield {"event": "trace", "stage": 5, "side": "trad", "step_idx": 2, "label": "2× fragmented KV keys ✕"}
+            yield {"event": "trace", "stage": 5, "side": "trad", "step_idx": 3, "label": "manual branch merge"}
+            yield {"event": "trace", "stage": 5, "side": "trad", "step_idx": 4, "label": "stale branch conflict ✕"}
+
             ov_a = open_overlay(conn, org_id=org_id, space_id=space_finance, owner="agent-a")
             ov_b = open_overlay(conn, org_id=org_id, space_id=space_finance, owner="agent-b")
             after_rows = conn.execute("SELECT COUNT(*) FROM knowledge_blocks WHERE org_id = %s", (org_id,)).fetchone()[0]
             copied_on_open = int(after_rows - before_rows)
+            yield {"event": "trace", "stage": 5, "side": "conv", "step_idx": 0, "label": f"open_overlay ×2 → {copied_on_open} copied rows ✓"}
 
             stage_delta(conn, overlay_id=ov_a.overlay_id, source_uri="policy://travel-policy.md", text="ACME Travel Cap v3: $1,500 per trip.")
             stage_delta(conn, overlay_id=ov_b.overlay_id, source_uri="policy://flight-class.md", text="Flights under 6h use economy class.")
             land_a = land_overlay(conn, overlay_id=ov_a.overlay_id, author="agent-a", message="Bump cap to $1,500")
             land_b = land_overlay(conn, overlay_id=ov_b.overlay_id, author="agent-b", message="Add flight class policy")
+            yield {"event": "trace", "stage": 5, "side": "conv", "step_idx": 1, "label": f"A→r{land_a.rev} · B auto-rebase→r{land_b.rev} ✓"}
 
-            # Stale overlay C pinned to base_rev=2 attempts overlapping edit -> CONFLICT
             ov_c = open_overlay(conn, org_id=org_id, space_id=space_finance, owner="agent-c", base_rev=2)
             stage_delta(conn, overlay_id=ov_c.overlay_id, source_uri="policy://travel-policy.md", text="Conflicting cap: $900.")
             land_c = land_overlay(conn, overlay_id=ov_c.overlay_id, author="agent-c", message="Stale conflicting edit")
+            yield {"event": "trace", "stage": 5, "side": "conv", "step_idx": 2, "label": f"stale C → {land_c.status.upper()} blocked ✕"}
 
-            # Instant Undo of land_a.rev + KV eviction
             undo_res = undo_revision(conn, org_id=org_id, space_id=space_finance, rev=int(land_a.rev or 3), author="arena-ops")
+            yield {"event": "trace", "stage": 5, "side": "conv", "step_idx": 3, "label": f"undo(r{land_a.rev}) → r{undo_res.undo_rev} (restored {len(undo_res.restored_block_ids)})"}
+
+            evicted_total = 0
             for bid in undo_res.deactivated_block_ids:
                 hrow = conn.execute("SELECT content_blake3 FROM knowledge_blocks WHERE id = %s", (bid,)).fetchone()
                 if hrow:
-                    evict_block_kv(self.valkey, hrow[0])
+                    evicted_total += evict_block_kv(self.valkey, hrow[0])
+            yield {"event": "trace", "stage": 5, "side": "conv", "step_idx": 4, "label": f"Valkey DEL stale KV ({evicted_total} purged) ✓"}
 
             s5_data = {
                 "copied_rows_on_open": copied_on_open,

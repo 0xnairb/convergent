@@ -83,7 +83,10 @@ def test_arena_config_and_full_showcase_stream() -> None:
                     if line.startswith("data: "):
                         events.append(json.loads(line[6:]))
 
+            traces = [e for e in events if e.get("event") == "trace"]
             steps = [e for e in events if e.get("event") == "step"]
+            assert len(traces) >= 45
+            assert {t["stage"] for t in traces} == {1, 2, 3, 4, 5}
             assert len(steps) == 5
             complete = next(e for e in events if e.get("event") == "complete")
             kpis = complete["kpis"]

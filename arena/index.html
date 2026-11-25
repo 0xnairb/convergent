@@ -585,8 +585,6 @@
       const topY = 42;
       const H = topY + spec.steps.length * stepY + 22;
       const xs = spec.actors.map((_, i) => (n === 1 ? W / 2 : padX + (i * (W - padX * 2)) / (n - 1)));
-      const totalDur = (spec.steps.length * 0.9 + 1.2).toFixed(2);
-      const accent = isConv ? "#14b8a6" : "#f87171";
 
       const actorsSvg = spec.actors.map((name, i) => {
         const x = xs[i];
@@ -600,13 +598,14 @@
         const y = topY + 26 + idx * stepY;
         const x1 = xs[s.from];
         const x2 = xs[s.to];
+        const gid = `${uid}_g${idx}`;
         const pid = `${uid}_p${idx}`;
-        const delay = (idx * 0.85).toFixed(2);
+        const lid = `${uid}_l${idx}`;
+        const aid = `${uid}_a${idx}`;
         const dash = s.dashed ? 'stroke-dasharray="5 3"' : "";
         let pathD, labelX, labelY;
 
         if (s.from === s.to) {
-          // Self-call loop on same lifeline
           pathD = `M ${x1} ${y - 6} C ${x1 + 42} ${y - 6}, ${x1 + 42} ${y + 14}, ${x1} ${y + 14}`;
           labelX = x1 + 48;
           labelY = y + 6;
@@ -625,16 +624,18 @@
 
         const textAnchor = s.from === s.to ? "start" : "middle";
         return `
-          <rect x="${x2 - 3}" y="${y - 8}" width="6" height="16" rx="2" fill="${s.color}" opacity="0.28" />
-          <path id="${pid}" d="${pathD}" fill="none" stroke="${s.color}" stroke-width="1.8" ${dash} opacity="0.88" />
-          ${arrowHead}
-          <text x="${labelX}" y="${labelY}" text-anchor="${textAnchor}" fill="${s.color}" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="10.2" font-weight="600">${s.label}</text>
-          <circle r="4" fill="${s.color}" filter="url(#glow_${uid})">
-            <animateMotion dur="0.85s" begin="${delay}s;${uid}_loop.end+${delay}s" fill="freeze" keyPoints="0;1" keyTimes="0;1" calcMode="linear">
-              <mpath href="#${pid}" />
-            </animateMotion>
-            <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.1;0.9;1" dur="0.85s" begin="${delay}s;${uid}_loop.end+${delay}s" />
-          </circle>`;
+          <g id="${gid}" opacity="0.22" style="transition: opacity 0.3s ease;">
+            <rect x="${x2 - 3}" y="${y - 8}" width="6" height="16" rx="2" fill="${s.color}" opacity="0.35" />
+            <path id="${pid}" d="${pathD}" fill="none" stroke="${s.color}" stroke-width="2" ${dash} />
+            ${arrowHead}
+            <text id="${lid}" x="${labelX}" y="${labelY}" text-anchor="${textAnchor}" fill="${s.color}" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="10.2" font-weight="600">${s.label}</text>
+            <circle r="4.5" fill="${s.color}" filter="url(#glow_${uid})" opacity="0">
+              <animateMotion id="${aid}" dur="0.55s" begin="indefinite" fill="remove" keyPoints="0;1" keyTimes="0;1" calcMode="linear">
+                <mpath href="#${pid}" />
+              </animateMotion>
+              <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.1;0.85;1" dur="0.55s" begin="${aid}.begin" />
+            </circle>
+          </g>`;
       }).join("");
 
       return `
@@ -645,9 +646,6 @@
               <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
             </filter>
           </defs>
-          <rect width="1" height="1" opacity="0">
-            <animate id="${uid}_loop" attributeName="opacity" from="0" to="0" dur="${totalDur}s" begin="0s;${uid}_loop.end" />
-          </rect>
           ${actorsSvg}
           ${stepsSvg}
         </svg>`;
@@ -656,27 +654,41 @@
     function renderDualArch(idx) {
       const f = STAGE_FLOWS[idx];
       if (!f) return "";
-      const salt = Math.random().toString(36).slice(2, 6);
       return `
         <div class="anim-in" style="display:flex; flex-direction:column; gap:10px;">
           <div class="seq-dual">
             <div class="seq-box trad">
               <div class="between">
                 <span class="eyebrow risk">✕ Part 1 · Traditional Architecture</span>
-                <span class="badge risk">Sequential / Leaky</span>
+                <span class="badge risk" id="s${idx}_trad_state">Awaiting run</span>
               </div>
-              ${renderSeqSvg(f.trad, `s${idx}t_${salt}`, false)}
+              ${renderSeqSvg(f.trad, `s${idx}_trad`, false)}
             </div>
             <div class="seq-box conv">
               <div class="between">
                 <span class="eyebrow">✓ Part 2 · Project Convergent</span>
-                <span class="badge teal">Pre-Filtered / Cached</span>
+                <span class="badge teal" id="s${idx}_conv_state">Awaiting run</span>
               </div>
-              ${renderSeqSvg(f.conv, `s${idx}c_${salt}`, true)}
+              ${renderSeqSvg(f.conv, `s${idx}_conv`, true)}
             </div>
           </div>
           <div class="arch-why"><strong>Why Convergent wins:</strong> <span>${f.why}</span></div>
+          <div id="extra-${idx}"></div>
         </div>`;
+    }
+
+    function fireRealTrace(stage, side, stepIdx, realLabel) {
+      const uid = `s${stage}_${side}`;
+      const g = document.getElementById(`${uid}_g${stepIdx}`);
+      const lbl = document.getElementById(`${uid}_l${stepIdx}`);
+      const anim = document.getElementById(`${uid}_a${stepIdx}`);
+      const st = document.getElementById(`${uid}_state`);
+      if (lbl && realLabel) lbl.textContent = realLabel;
+      if (g) g.setAttribute("opacity", "1");
+      if (st) st.textContent = `Live · step ${stepIdx + 1}/5`;
+      if (anim && typeof anim.beginElement === "function") {
+        try { anim.beginElement(); } catch (_) {}
+      }
     }
 
     async function api(path, opts = {}) {
@@ -717,18 +729,15 @@
         badge.textContent = `Running · ${((performance.now() - t0) / 1000).toFixed(1)}s`;
       }, 100);
 
-      document.getElementById(`body-${idx}`).innerHTML = renderDualArch(idx);
       card.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
 
-    function renderComparisonBody(idx, d, extraNote = "") {
+    function renderComparisonExtra(d, extraNote = "") {
       const maxMs = Math.max(d.standard_rag.latency_ms || 1, d.convergent.latency_ms || 1);
       const ragPct = Math.max(8, Math.round((d.standard_rag.latency_ms / maxMs) * 100));
       const convPct = Math.max(8, Math.round((d.convergent.latency_ms / maxMs) * 100));
       return `
-        <div class="anim-in" style="display:flex; flex-direction:column; gap:12px;">
-          ${renderDualArch(idx)}
-          <div class="muted mono">Prompt: "${d.prompt}"</div>
+        <div class="anim-in" style="display:flex; flex-direction:column; gap:10px; margin-top:4px;">
           <div class="g2">
             <div>
               <div class="between" style="margin-bottom:6px;">
@@ -781,7 +790,7 @@
         document.getElementById(`step-${i}`).className = "step-card";
         const b = document.getElementById(`badge-${i}`);
         b.className = "badge"; b.textContent = "Pending";
-        document.getElementById(`body-${i}`).innerHTML = `<span class="muted">Queued...</span>`;
+        document.getElementById(`body-${i}`).innerHTML = renderDualArch(i);
       }
     }
 
@@ -829,6 +838,10 @@
           es.close();
           return;
         }
+        if (evt.event === "trace") {
+          fireRealTrace(evt.stage, evt.side, evt.step_idx, evt.label);
+          return;
+        }
         if (evt.event === "step") {
           if (activeTimer) clearInterval(activeTimer);
           const i = evt.index;
@@ -836,20 +849,24 @@
           document.getElementById(`step-${i}`).className = "step-card done";
           const b = document.getElementById(`badge-${i}`);
           b.className = "badge green"; b.textContent = "✓ Verified";
+          const tSt = document.getElementById(`s${i}_trad_state`);
+          const cSt = document.getElementById(`s${i}_conv_state`);
+          if (tSt) tSt.textContent = "Recorded";
+          if (cSt) cSt.textContent = "Verified ✓";
 
+          const extraEl = document.getElementById(`extra-${i}`);
           if (i <= 3) {
             const extra = i === 3
               ? `<span class="badge green">Instant OpenFGA Revoke</span> Bob authorized docs immediately after revoke = <strong>${evt.data.bob_docs_after_revoke}</strong>`
               : "";
-            document.getElementById(`body-${i}`).innerHTML = renderComparisonBody(i, evt.data, extra);
+            extraEl.innerHTML = renderComparisonExtra(evt.data, extra);
           } else if (i === 4) {
             const d = evt.data;
             const maxMs = Math.max(d.cold_ms || 1, d.warm_ms || 1);
             const coldPct = Math.max(10, Math.round((d.cold_ms / maxMs) * 100));
             const warmPct = Math.max(10, Math.round((d.warm_ms / maxMs) * 100));
-            document.getElementById("body-4").innerHTML = `
-              <div class="anim-in" style="display:flex; flex-direction:column; gap:12px;">
-                ${renderDualArch(4)}
+            extraEl.innerHTML = `
+              <div class="anim-in" style="display:flex; flex-direction:column; gap:10px; margin-top:4px;">
                 <div class="bar-group">
                   <div class="bar-row">
                     <span class="muted">Cold Prefill (Alice)</span>
@@ -877,30 +894,27 @@
               </div>`;
           } else if (i === 5) {
             const d = evt.data;
-            document.getElementById("body-5").innerHTML = `
-              <div class="anim-in" style="display:flex; flex-direction:column; gap:12px;">
-                ${renderDualArch(5)}
-                <div class="flow-diagram">
-                  <div class="flow-card purple">
-                    <span class="eyebrow purple">0-Byte Open</span>
-                    <strong>${d.copied_rows_on_open} copied rows</strong>
-                    <span class="muted">2 parallel agent overlays share 100% base KV</span>
-                  </div>
-                  <div class="flow-card teal">
-                    <span class="eyebrow">Auto-Rebase Land</span>
-                    <strong>r${d.agent_a_landed_rev} → r${d.agent_b_auto_rebased_rev}</strong>
-                    <span class="muted">Non-overlapping Agent A &amp; B landed cleanly</span>
-                  </div>
-                  <div class="flow-card warn">
-                    <span class="eyebrow" style="color:var(--warn);">Optimistic Guard</span>
-                    <strong>${d.agent_c_conflict_status.toUpperCase()}</strong>
-                    <span class="muted">Stale Agent C blocked from clobbering r${d.agent_a_landed_rev}</span>
-                  </div>
-                  <div class="flow-card green">
-                    <span class="eyebrow green">Instant Undo</span>
-                    <strong>Undo r${d.agent_a_landed_rev} → r${d.undo_rev}</strong>
-                    <span class="muted">Restored ${d.restored_blocks} block &amp; evicted stale KV</span>
-                  </div>
+            extraEl.innerHTML = `
+              <div class="flow-diagram anim-in" style="margin-top:4px;">
+                <div class="flow-card purple">
+                  <span class="eyebrow purple">0-Byte Open</span>
+                  <strong>${d.copied_rows_on_open} copied rows</strong>
+                  <span class="muted">2 parallel agent overlays share 100% base KV</span>
+                </div>
+                <div class="flow-card teal">
+                  <span class="eyebrow">Auto-Rebase Land</span>
+                  <strong>r${d.agent_a_landed_rev} → r${d.agent_b_auto_rebased_rev}</strong>
+                  <span class="muted">Non-overlapping Agent A &amp; B landed cleanly</span>
+                </div>
+                <div class="flow-card warn">
+                  <span class="eyebrow" style="color:var(--warn);">Optimistic Guard</span>
+                  <strong>${d.agent_c_conflict_status.toUpperCase()}</strong>
+                  <span class="muted">Stale Agent C blocked from clobbering r${d.agent_a_landed_rev}</span>
+                </div>
+                <div class="flow-card green">
+                  <span class="eyebrow green">Instant Undo</span>
+                  <strong>Undo r${d.agent_a_landed_rev} → r${d.undo_rev}</strong>
+                  <span class="muted">Restored ${d.restored_blocks} block &amp; evicted stale KV</span>
                 </div>
               </div>`;
           }
