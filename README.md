@@ -11,12 +11,12 @@ Own your versioned institutional memory and context boundaries; swap any self-ho
 
 ---
 
-## Interactive MVP Studio (Web GUI)
+## Convergent Arena (Single-Page Showcase Dashboard)
 
-Launch **Convergent Studio** (`http://127.0.0.1:8095`) to explore Layered Overlays, Mount Stacks, instant Undo, and a live side-by-side **Standard RAG vs. Project Convergent** arena powered by local Ollama (`granite4.2:3b`):
+Launch **Convergent Arena** (`http://127.0.0.1:8095`) to configure any local or remote Ollama endpoint/model and run all 5 live proofs with a single button — updating every comparison card and benchmark row with real execution data:
 
 ```bash
-cd worker-py && uv run python ../studio/server.py
+cd worker-py && uv run python ../arena/server.py
 ```
 
 ## Quickstart (Disposable CLI Demo on macOS Apple Silicon)
