@@ -5,3 +5,4 @@ __pycache__/
 .pytest_cache/
 gateway-rs/target/
 .DS_Store
+video/

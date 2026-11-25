@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 128" width="1120" height="256" fill="none">
+  <defs>
+    <linearGradient id="cvgTealViolet" x1="12" y1="12" x2="108" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2dd4bf" />
+      <stop offset="100%" stop-color="#c084fc" />
+    </linearGradient>
+    <linearGradient id="cvgVioletTeal" x1="108" y1="12" x2="12" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#c084fc" />
+      <stop offset="100%" stop-color="#2dd4bf" />
+    </linearGradient>
+    <filter id="cvgNodeGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="3.5" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <g transform="translate(4, 4)">
+    <rect x="8" y="8" width="104" height="104" rx="24" fill="#0b1222" stroke="url(#cvgTealViolet)" stroke-opacity="0.34" stroke-width="2" />
+    <g stroke="#94a3b8" stroke-opacity="0.38" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="5 6">
+      <path d="M 33 14 Q 33 66 106 87" />
+      <path d="M 106 33 Q 54 33 33 106" />
+      <path d="M 87 106 Q 87 54 14 33" />
+      <path d="M 14 87 Q 66 87 87 14" />
+    </g>
+    <g stroke-width="3.6" stroke-linecap="round">
+      <path d="M 46 14 Q 46 60 106 74" stroke="url(#cvgTealViolet)" />
+      <path d="M 106 46 Q 60 46 46 106" stroke="url(#cvgVioletTeal)" />
+      <path d="M 74 106 Q 74 60 14 46" stroke="url(#cvgTealViolet)" />
+      <path d="M 14 74 Q 60 74 74 14" stroke="url(#cvgVioletTeal)" />
+    </g>
+    <circle cx="60" cy="60" r="9.5" fill="#070b14" stroke="url(#cvgTealViolet)" stroke-width="2.6" />
+    <circle cx="60" cy="60" r="4.5" fill="#2dd4bf" filter="url(#cvgNodeGlow)" />
+  </g>
+
+  <text x="148" y="72" fill="#f8fafc" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif" font-size="44" font-weight="800" letter-spacing="-1.4">Project Convergent</text>
+  <text x="150" y="102" fill="#94a3b8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600" letter-spacing="2.2">WORLD-STATE &amp; EXECUTION PLANE</text>
+</svg>

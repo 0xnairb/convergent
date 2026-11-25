@@ -278,7 +278,27 @@
 <body>
   <header class="topbar">
     <div class="brand">
-      <span class="dot-brand"></span>
+      <svg width="24" height="24" viewBox="0 0 120 120" fill="none" aria-label="Project Convergent Logo" style="flex-shrink:0;">
+        <defs>
+          <linearGradient id="navCvgA" x1="12" y1="12" x2="108" y2="108" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#2dd4bf" /><stop offset="100%" stop-color="#c084fc" />
+          </linearGradient>
+          <linearGradient id="navCvgB" x1="108" y1="12" x2="12" y2="108" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#c084fc" /><stop offset="100%" stop-color="#2dd4bf" />
+          </linearGradient>
+        </defs>
+        <rect x="8" y="8" width="104" height="104" rx="24" fill="#0b1222" stroke="url(#navCvgA)" stroke-opacity="0.45" stroke-width="4" />
+        <g stroke="#94a3b8" stroke-opacity="0.4" stroke-width="3" stroke-linecap="round" stroke-dasharray="6 7">
+          <path d="M 33 14 Q 33 66 106 87" /><path d="M 106 33 Q 54 33 33 106" />
+          <path d="M 87 106 Q 87 54 14 33" /><path d="M 14 87 Q 66 87 87 14" />
+        </g>
+        <g stroke-width="5.5" stroke-linecap="round">
+          <path d="M 46 14 Q 46 60 106 74" stroke="url(#navCvgA)" /><path d="M 106 46 Q 60 46 46 106" stroke="url(#navCvgB)" />
+          <path d="M 74 106 Q 74 60 14 46" stroke="url(#navCvgA)" /><path d="M 14 74 Q 60 74 74 14" stroke="url(#navCvgB)" />
+        </g>
+        <circle cx="60" cy="60" r="10" fill="#070b14" stroke="url(#navCvgA)" stroke-width="4" />
+        <circle cx="60" cy="60" r="5" fill="#2dd4bf" />
+      </svg>
       <span class="brand-title">Project Convergent</span>
       <span class="brand-sub">Arena</span>
     </div>

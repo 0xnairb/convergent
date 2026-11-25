@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="512" height="512" fill="none">
+  <defs>
+    <linearGradient id="cvgTealViolet" x1="12" y1="12" x2="108" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2dd4bf" />
+      <stop offset="100%" stop-color="#c084fc" />
+    </linearGradient>
+    <linearGradient id="cvgVioletTeal" x1="108" y1="12" x2="12" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#c084fc" />
+      <stop offset="100%" stop-color="#2dd4bf" />
+    </linearGradient>
+    <filter id="cvgNodeGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Subtle intersection boundary -->
+  <rect x="8" y="8" width="104" height="104" rx="24" fill="#0b1222" stroke="url(#cvgTealViolet)" stroke-opacity="0.32" stroke-width="2" />
+
+  <!-- Outer dashed crossroad guide lanes (inspired by aerial intersection markings) -->
+  <g stroke="#94a3b8" stroke-opacity="0.38" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="5 6">
+    <path d="M 33 14 Q 33 66 106 87" />
+    <path d="M 106 33 Q 54 33 33 106" />
+    <path d="M 87 106 Q 87 54 14 33" />
+    <path d="M 14 87 Q 66 87 87 14" />
+  </g>
+
+  <!-- 4-way sweeping convergent trajectories -->
+  <g stroke-width="3.6" stroke-linecap="round">
+    <path d="M 46 14 Q 46 60 106 74" stroke="url(#cvgTealViolet)" />
+    <path d="M 106 46 Q 60 46 46 106" stroke="url(#cvgVioletTeal)" />
+    <path d="M 74 106 Q 74 60 14 46" stroke="url(#cvgTealViolet)" />
+    <path d="M 14 74 Q 60 74 74 14" stroke="url(#cvgVioletTeal)" />
+  </g>
+
+  <!-- Central authoritative intersection core -->
+  <circle cx="60" cy="60" r="9.5" fill="#070b14" stroke="url(#cvgTealViolet)" stroke-width="2.6" />
+  <circle cx="60" cy="60" r="4.5" fill="#2dd4bf" filter="url(#cvgNodeGlow)" />
+</svg>
