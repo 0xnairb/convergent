@@ -193,26 +193,113 @@
       background: linear-gradient(180deg, rgba(20,184,166,0.05) 0%, var(--surface) 40%);
     }
 
-    /* Live Pipeline Visualizer (while running) */
-    .pipeline {
-      display: flex; align-items: center; gap: 10px; padding: 12px 14px;
-      background: var(--bg); border: 1px solid var(--hairline); border-radius: 10px;
-      position: relative; overflow: hidden;
+    /* Dual-Track Architecture Visualizer (Part 1: Traditional vs Part 2: Convergent) */
+    .arch-dual {
+      display: flex; flex-direction: column; gap: 10px;
+      padding: 12px 14px; background: var(--bg);
+      border: 1px solid var(--hairline); border-radius: 10px;
     }
-    .pipe-node {
+    .arch-track {
+      display: grid; grid-template-columns: 118px 1fr; align-items: center; gap: 12px;
+    }
+    @media (max-width: 720px) { .arch-track { grid-template-columns: 1fr; gap: 6px; } }
+    .track-label {
+      font-family: var(--font-mono); font-size: 10.5px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .track-label.trad { color: var(--risk); }
+    .track-label.conv { color: var(--teal); }
+    .track-nodes {
+      display: flex; align-items: center; gap: 0; overflow-x: auto; padding: 3px 0;
+    }
+    .anode {
+      position: relative; flex-shrink: 0;
       font-family: var(--font-mono); font-size: 11px; font-weight: 600;
-      padding: 4px 10px; border-radius: 6px; background: var(--surface-2);
-      border: 1px solid var(--hairline-strong); color: var(--ink-2); z-index: 2;
+      padding: 6px 10px; border-radius: 7px;
+      background: var(--surface); border: 1px solid var(--hairline-strong);
+      color: var(--ink-2); white-space: nowrap;
+      display: flex; flex-direction: column; gap: 2px;
     }
-    .pipe-node.lit { border-color: var(--teal-bd); color: var(--teal); background: var(--teal-bg); }
-    .pipe-track {
-      flex: 1; height: 2px; background: var(--hairline); position: relative; min-width: 24px;
+    .anode small { font-size: 9.5px; font-weight: 500; color: var(--ink-3); }
+    .anode.hit-risk {
+      border-color: var(--risk-bd); background: var(--risk-bg); color: #fecaca;
+      animation: nodePulseRisk 2.4s ease-in-out infinite;
     }
-    .pipe-signal {
-      position: absolute; top: -2px; width: 28px; height: 6px; border-radius: 999px;
-      background: linear-gradient(90deg, transparent, var(--teal), var(--purple));
-      animation: signalMove 1.15s linear infinite;
+    .anode.hit-teal {
+      border-color: var(--teal-bd); background: var(--teal-bg); color: #99f6e4;
+      animation: nodePulseTeal 2.0s ease-in-out infinite;
     }
+    .anode.hit-green {
+      border-color: var(--green-bd); background: var(--green-bg); color: #bbf7d0;
+      animation: nodePulseGreen 1.8s ease-in-out infinite;
+    }
+    .anode.hit-purple {
+      border-color: var(--purple-bd); background: var(--purple-bg); color: #e9d5ff;
+      animation: nodePulsePurple 2.0s ease-in-out infinite;
+    }
+    .alink {
+      position: relative; flex: 1; min-width: 28px; height: 2px;
+      background: var(--hairline-strong); overflow: visible;
+    }
+    .alink::after {
+      content: ""; position: absolute; right: -1px; top: -3px;
+      border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+      border-left: 5px solid var(--hairline-strong);
+    }
+    .packet {
+      position: absolute; top: -3px; left: 0; width: 10px; height: 8px;
+      border-radius: 999px; pointer-events: none;
+    }
+    .packet.trad {
+      background: var(--risk); box-shadow: 0 0 10px var(--risk);
+      animation: packetSlow 2.6s linear infinite;
+    }
+    .packet.conv {
+      background: var(--teal); box-shadow: 0 0 10px var(--teal);
+      animation: packetFast 1.35s linear infinite;
+    }
+    .packet.cache {
+      background: var(--green); box-shadow: 0 0 12px var(--green);
+      animation: packetFast 1.05s linear infinite;
+    }
+    .packet.overlay {
+      background: var(--purple); box-shadow: 0 0 12px var(--purple);
+      animation: packetFast 1.25s linear infinite;
+    }
+    @keyframes packetSlow {
+      0% { left: 0%; opacity: 0; }
+      15% { opacity: 1; }
+      85% { opacity: 1; }
+      100% { left: calc(100% - 10px); opacity: 0; }
+    }
+    @keyframes packetFast {
+      0% { left: 0%; opacity: 0; }
+      15% { opacity: 1; }
+      85% { opacity: 1; }
+      100% { left: calc(100% - 10px); opacity: 0; }
+    }
+    @keyframes nodePulseRisk {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.25); }
+      50% { box-shadow: 0 0 14px 1px rgba(248, 113, 113, 0.35); }
+    }
+    @keyframes nodePulseTeal {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.25); }
+      50% { box-shadow: 0 0 14px 1px rgba(20, 184, 166, 0.4); }
+    }
+    @keyframes nodePulseGreen {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.25); }
+      50% { box-shadow: 0 0 14px 1px rgba(34, 197, 94, 0.42); }
+    }
+    @keyframes nodePulsePurple {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.25); }
+      50% { box-shadow: 0 0 14px 1px rgba(168, 85, 247, 0.4); }
+    }
+    .arch-why {
+      font-size: 12px; color: var(--ink-3); border-top: 1px solid var(--hairline);
+      padding-top: 8px; display: flex; align-items: center; gap: 8px;
+    }
+    .arch-why strong { color: var(--teal); }
 
     /* Comparison Bars */
     .bar-group { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
@@ -457,15 +544,115 @@
   </div>
 
   <script>
-    const STAGE_PIPES = {
-      1: ["Policy v1→v2", "Postgres Bi-Temporal", "OpenFGA Pre-Filter", "Ollama Inference"],
-      2: ["Infra v1→Postmortem", "Cross-URI Supersede", "Mount Stack", "Ollama Inference"],
-      3: ["Bob (Engineering)", "OpenFGA Check", "Revoke Tuple", "0-Doc Verification"],
-      4: ["Alice Cold", "Carol Warm Hit", "HMAC-SHA256 Split", "Valkey KV Check"],
-      5: ["0-Byte Overlays", "Parallel Δ Stage", "Auto-Rebase Land", "Conflict & Undo"],
+    const STAGE_FLOWS = {
+      1: {
+        trad: [
+          { t: "Request", s: "Travel Cap?" },
+          { t: "Vector DB", s: "v1 $500 + v2 $1,200", cls: "hit-risk" },
+          { t: "LLM", s: "Sees conflicting docs", cls: "hit-risk" },
+          { t: "Response", s: "Stale leak risk" },
+        ],
+        conv: [
+          { t: "Request", s: "Travel Cap?" },
+          { t: "Bi-Temporal Gate", s: "valid_to IS NULL", cls: "hit-teal" },
+          { t: "Active v2 Only", s: "$1,200 + citation", cls: "hit-green" },
+          { t: "LLM", s: "Clean current truth" },
+        ],
+        packetCls: "conv",
+        why: "Traditional RAG appends v2 beside v1 so both enter the prompt. Convergent atomically closes v1 (valid_to) while preserving as_of audit replay.",
+      },
+      2: {
+        trad: [
+          { t: "Postmortem 42", s: "eu-central-1" },
+          { t: "Flat Index", s: "Old us-east-1 stays", cls: "hit-risk" },
+          { t: "LLM", s: "Retrieves both URIs", cls: "hit-risk" },
+          { t: "Hallucination", s: "Stale us-east-1" },
+        ],
+        conv: [
+          { t: "Postmortem 42", s: "eu-central-1" },
+          { t: "Supersede Engine", s: "Closes old URI", cls: "hit-teal" },
+          { t: "Valkey DEL", s: "Purges stale KV", cls: "hit-purple" },
+          { t: "LLM", s: "Only eu-central-1", cls: "hit-green" },
+        ],
+        packetCls: "conv",
+        why: "Traditional stacks only overwrite identical filenames. Convergent supersedes conflicting facts across different URIs and evicts stale KV tensors immediately.",
+      },
+      3: {
+        trad: [
+          { t: "Request (Bob)", s: "Engineering" },
+          { t: "LLM", s: "Prompt hits LLM first", cls: "hit-risk" },
+          { t: "Tool Call", s: "Fetches all spaces" },
+          { t: "Post-RBAC", s: "Late / leaky filter", cls: "hit-risk" },
+        ],
+        conv: [
+          { t: "Request (Bob)", s: "Engineering" },
+          { t: "OpenFGA Gate", s: "Pre-filter before Top-K", cls: "hit-teal" },
+          { t: "Memory Layer", s: "0 Finance docs", cls: "hit-green" },
+          { t: "LLM", s: "Zero leakage" },
+        ],
+        packetCls: "conv",
+        why: "Traditional agent flows hit the LLM & tools before checking RBAC (leaking private context or stale caches). Convergent enforces OpenFGA before retrieval and revokes in <10ms.",
+      },
+      4: {
+        trad: [
+          { t: "Request (Carol)", s: "Finance" },
+          { t: "Stateless Proxy", s: "No scoped KV" },
+          { t: "Cold Prefill", s: "Recomputes all tokens", cls: "hit-risk" },
+          { t: "Shared Prefix", s: "Side-channel risk", cls: "hit-risk" },
+        ],
+        conv: [
+          { t: "Request (Carol)", s: "Finance" },
+          { t: "HMAC-SHA256", s: "space + model + hash", cls: "hit-purple" },
+          { t: "Smart Cache HIT", s: "⚡ Skips cold prefill", cls: "hit-green" },
+          { t: "Fast Decode", s: "0 cross-scope leak", cls: "hit-teal" },
+        ],
+        packetCls: "cache",
+        why: "Traditional proxies either suffer cold prefill on every turn or share prefix caches across tenants. Convergent hashes KV keys per clearance scope: Carol hits warm KV while Bob's identical text stays isolated.",
+      },
+      5: {
+        trad: [
+          { t: "Spawn 2 Agents", s: "Parallel tasks" },
+          { t: "Copy-Heavy Branch", s: "Clones 2×N rows", cls: "hit-risk" },
+          { t: "Cache Thrash", s: "Fragmented KV keys", cls: "hit-risk" },
+          { t: "Manual Merge", s: "Conflicts & stale" },
+        ],
+        conv: [
+          { t: "Spawn 2 Agents", s: "Parallel tasks" },
+          { t: "0-Byte Overlays", s: "Shared Base KV", cls: "hit-purple" },
+          { t: "Auto-Rebase Land", s: "r3, r4 · C=CONFLICT", cls: "hit-teal" },
+          { t: "Instant Undo", s: "Atomic rollback", cls: "hit-green" },
+        ],
+        packetCls: "overlay",
+        why: "Traditional Git-style branches copy state and fragment KV caches at agent scale. Convergent spawns 0-byte Overlays sharing 100% of base KV, auto-rebases non-overlapping lands, and rolls back atomically.",
+      },
     };
 
     let activeTimer = null;
+
+    function renderDualArch(idx) {
+      const f = STAGE_FLOWS[idx];
+      if (!f) return "";
+      const buildTrack = (nodes, pCls) => nodes.map((n, k) => `
+        <div class="anode ${n.cls || ""}">
+          <span>${n.t}</span>
+          <small>${n.s}</small>
+        </div>
+        ${k < nodes.length - 1 ? `<div class="alink"><div class="packet ${pCls}" style="animation-delay:${(k * 0.35).toFixed(2)}s"></div></div>` : ""}
+      `).join("");
+
+      return `
+        <div class="arch-dual anim-in">
+          <div class="arch-track">
+            <span class="track-label trad">✕ Traditional</span>
+            <div class="track-nodes">${buildTrack(f.trad, "trad")}</div>
+          </div>
+          <div class="arch-track">
+            <span class="track-label conv">✓ Convergent</span>
+            <div class="track-nodes">${buildTrack(f.conv, f.packetCls)}</div>
+          </div>
+          <div class="arch-why"><strong>Why Convergent wins:</strong> <span>${f.why}</span></div>
+        </div>`;
+    }
 
     async function api(path, opts = {}) {
       const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
@@ -505,43 +692,37 @@
         badge.textContent = `Running · ${((performance.now() - t0) / 1000).toFixed(1)}s`;
       }, 100);
 
-      const nodes = STAGE_PIPES[idx] || ["Input", "Convergent", "Verify"];
-      document.getElementById(`body-${idx}`).innerHTML = `
-        <div class="pipeline anim-in">
-          ${nodes.map((n, k) => `
-            <span class="pipe-node ${k === 1 || k === 2 ? "lit" : ""}">${n}</span>
-            ${k < nodes.length - 1 ? `<div class="pipe-track"><div class="pipe-signal" style="animation-delay:${k * 0.25}s"></div></div>` : ""}
-          `).join("")}
-        </div>`;
+      document.getElementById(`body-${idx}`).innerHTML = renderDualArch(idx);
       card.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
 
-    function renderComparisonBody(d, extraNote = "") {
+    function renderComparisonBody(idx, d, extraNote = "") {
       const maxMs = Math.max(d.standard_rag.latency_ms || 1, d.convergent.latency_ms || 1);
       const ragPct = Math.max(8, Math.round((d.standard_rag.latency_ms / maxMs) * 100));
       const convPct = Math.max(8, Math.round((d.convergent.latency_ms / maxMs) * 100));
       return `
-        <div class="anim-in">
-          <div class="muted mono" style="margin-bottom:8px;">Prompt: "${d.prompt}"</div>
+        <div class="anim-in" style="display:flex; flex-direction:column; gap:12px;">
+          ${renderDualArch(idx)}
+          <div class="muted mono">Prompt: "${d.prompt}"</div>
           <div class="g2">
             <div>
               <div class="between" style="margin-bottom:6px;">
-                <span class="eyebrow risk">Legacy Stack (Standard RAG)</span>
+                <span class="eyebrow risk">Traditional Stack Output</span>
                 <span class="badge risk">${d.standard_rag.stale_leaked} stale · ${d.standard_rag.cross_space_leaked} cross-space</span>
               </div>
               <div class="answer-box risk">${d.standard_rag.answer}</div>
             </div>
             <div>
               <div class="between" style="margin-bottom:6px;">
-                <span class="eyebrow">Project Convergent</span>
+                <span class="eyebrow">Project Convergent Output</span>
                 <span class="badge teal">KV ${d.convergent.kv_hits}/${d.convergent.kv_total} · 0 leaks</span>
               </div>
               <div class="answer-box teal">${d.convergent.answer}</div>
             </div>
           </div>
-          <div class="bar-group" style="margin-top:10px;">
+          <div class="bar-group">
             <div class="bar-row">
-              <span class="muted">Legacy Stack</span>
+              <span class="muted">Traditional Stack</span>
               <div class="bar-track"><div class="bar-fill risk" style="width:${ragPct}%"></div></div>
               <span class="mono" style="text-align:right;">${d.standard_rag.latency_ms} ms</span>
             </div>
@@ -551,7 +732,7 @@
               <span class="mono" style="text-align:right; color:var(--teal);">${d.convergent.latency_ms} ms</span>
             </div>
           </div>
-          ${extraNote ? `<div class="muted" style="margin-top:8px;">${extraNote}</div>` : ""}
+          ${extraNote ? `<div class="muted">${extraNote}</div>` : ""}
         </div>`;
     }
 
@@ -635,14 +816,15 @@
             const extra = i === 3
               ? `<span class="badge green">Instant OpenFGA Revoke</span> Bob authorized docs immediately after revoke = <strong>${evt.data.bob_docs_after_revoke}</strong>`
               : "";
-            document.getElementById(`body-${i}`).innerHTML = renderComparisonBody(evt.data, extra);
+            document.getElementById(`body-${i}`).innerHTML = renderComparisonBody(i, evt.data, extra);
           } else if (i === 4) {
             const d = evt.data;
             const maxMs = Math.max(d.cold_ms || 1, d.warm_ms || 1);
             const coldPct = Math.max(10, Math.round((d.cold_ms / maxMs) * 100));
             const warmPct = Math.max(10, Math.round((d.warm_ms / maxMs) * 100));
             document.getElementById("body-4").innerHTML = `
-              <div class="anim-in">
+              <div class="anim-in" style="display:flex; flex-direction:column; gap:12px;">
+                ${renderDualArch(4)}
                 <div class="bar-group">
                   <div class="bar-row">
                     <span class="muted">Cold Prefill (Alice)</span>
@@ -655,7 +837,7 @@
                     <span class="mono" style="text-align:right; color:var(--green);">${d.warm_ms} ms</span>
                   </div>
                 </div>
-                <div class="flow-diagram" style="margin-top:12px;">
+                <div class="flow-diagram">
                   <div class="flow-card teal">
                     <span class="eyebrow">Finance · Alice &amp; Carol</span>
                     <span class="mono">${d.kv_alice_prefix}</span>
@@ -671,26 +853,29 @@
           } else if (i === 5) {
             const d = evt.data;
             document.getElementById("body-5").innerHTML = `
-              <div class="flow-diagram anim-in">
-                <div class="flow-card purple">
-                  <span class="eyebrow purple">0-Byte Open</span>
-                  <strong>${d.copied_rows_on_open} copied rows</strong>
-                  <span class="muted">2 parallel agent overlays share 100% base KV</span>
-                </div>
-                <div class="flow-card teal">
-                  <span class="eyebrow">Auto-Rebase Land</span>
-                  <strong>r${d.agent_a_landed_rev} → r${d.agent_b_auto_rebased_rev}</strong>
-                  <span class="muted">Non-overlapping Agent A &amp; B landed cleanly</span>
-                </div>
-                <div class="flow-card warn">
-                  <span class="eyebrow" style="color:var(--warn);">Optimistic Guard</span>
-                  <strong>${d.agent_c_conflict_status.toUpperCase()}</strong>
-                  <span class="muted">Stale Agent C blocked from clobbering r${d.agent_a_landed_rev}</span>
-                </div>
-                <div class="flow-card green">
-                  <span class="eyebrow green">Instant Undo</span>
-                  <strong>Undo r${d.agent_a_landed_rev} → r${d.undo_rev}</strong>
-                  <span class="muted">Restored ${d.restored_blocks} block &amp; evicted stale KV</span>
+              <div class="anim-in" style="display:flex; flex-direction:column; gap:12px;">
+                ${renderDualArch(5)}
+                <div class="flow-diagram">
+                  <div class="flow-card purple">
+                    <span class="eyebrow purple">0-Byte Open</span>
+                    <strong>${d.copied_rows_on_open} copied rows</strong>
+                    <span class="muted">2 parallel agent overlays share 100% base KV</span>
+                  </div>
+                  <div class="flow-card teal">
+                    <span class="eyebrow">Auto-Rebase Land</span>
+                    <strong>r${d.agent_a_landed_rev} → r${d.agent_b_auto_rebased_rev}</strong>
+                    <span class="muted">Non-overlapping Agent A &amp; B landed cleanly</span>
+                  </div>
+                  <div class="flow-card warn">
+                    <span class="eyebrow" style="color:var(--warn);">Optimistic Guard</span>
+                    <strong>${d.agent_c_conflict_status.toUpperCase()}</strong>
+                    <span class="muted">Stale Agent C blocked from clobbering r${d.agent_a_landed_rev}</span>
+                  </div>
+                  <div class="flow-card green">
+                    <span class="eyebrow green">Instant Undo</span>
+                    <strong>Undo r${d.agent_a_landed_rev} → r${d.undo_rev}</strong>
+                    <span class="muted">Restored ${d.restored_blocks} block &amp; evicted stale KV</span>
+                  </div>
                 </div>
               </div>`;
           }
@@ -737,6 +922,9 @@
       };
     };
 
+    for (let i = 1; i <= 5; i++) {
+      document.getElementById(`body-${i}`).innerHTML = renderDualArch(i);
+    }
     api("/api/config").then(renderConfig);
   </script>
 </body>
