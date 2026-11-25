@@ -298,36 +298,12 @@
     <section class="hero">
       <div class="hero-copy">
         <span class="eyebrow">Live Comparison Arena · Zero Hard-Coded Benchmarks</span>
-        <h1>Legacy AI Stacks vs. <span class="grad">Project Convergent</span></h1>
-        <p class="subtitle">One click benchmarks <strong>Stateless Routers, Standard RAG, and Copy-Heavy Branches</strong> against Project Convergent across truth versioning, space isolation, HMAC KV caching, and zero-copy Overlays — live on your Ollama model.</p>
+        <h1>Traditional Architecture vs. <span class="grad">Project Convergent</span></h1>
+        <p class="subtitle">One click executes all 5 live proofs against PostgreSQL 17, Valkey 8, OpenFGA, and your chosen Ollama model — animating real request traces and populating the measured scorecard below.</p>
       </div>
       <div class="row">
         <span class="badge" id="run-status-badge">Ready</span>
         <button class="btn primary" id="btn-run-showcase">▶ Run Full Showcase</button>
-      </div>
-    </section>
-
-    <!-- LIVE KPI STRIP (ALL VALUES POPULATED ONLY FROM REAL RUNS) -->
-    <section class="g4">
-      <div class="panel green">
-        <span class="eyebrow green">Smart Cache Speedup</span>
-        <div class="metric green" id="kpi-speedup">—</div>
-        <span class="muted" id="kpi-speedup-sub">Cold vs. warm latency (ms)</span>
-      </div>
-      <div class="panel risk">
-        <span class="eyebrow risk">Legacy Stack Leaks</span>
-        <div class="metric risk" id="kpi-rag-leaks">—</div>
-        <span class="muted" id="kpi-rag-leaks-sub">Stale + cross-space blocks leaked</span>
-      </div>
-      <div class="panel teal">
-        <span class="eyebrow">Convergent Leaks</span>
-        <div class="metric teal" id="kpi-conv-leaks">—</div>
-        <span class="muted" id="kpi-conv-leaks-sub">OpenFGA + HMAC KV + instant revoke</span>
-      </div>
-      <div class="panel purple">
-        <span class="eyebrow purple">Zero-Copy Overlays</span>
-        <div class="metric purple" id="kpi-overlays">—</div>
-        <span class="muted" id="kpi-overlays-sub">Copied blocks · auto-rebase · undo</span>
       </div>
     </section>
 
@@ -379,7 +355,7 @@
       <div class="between">
         <div>
           <span class="eyebrow green">Live Benchmark Scorecard</span>
-          <h3 style="font-size:16px; margin-top:2px;">Measured Run Results (Legacy Stacks vs. Project Convergent)</h3>
+          <h3 style="font-size:16px; margin-top:2px;">Measured Run Results (Traditional Architecture vs. Project Convergent)</h3>
         </div>
         <span class="badge" id="bench-meta">No run yet</span>
       </div>
@@ -387,7 +363,7 @@
         <thead>
           <tr>
             <th>Dimension</th>
-            <th>Legacy Stack (RAG / Stateless Router / Branches)</th>
+            <th>Traditional Architecture (Measured)</th>
             <th>Project Convergent (Measured)</th>
           </tr>
         </thead>
@@ -459,6 +435,7 @@
   <script>
     const STAGE_FLOWS = {
       1: {
+        what: "A policy changes from v1 ($500 travel cap) to v2 ($1,200). Both systems answer the same user question while preserving historical auditability.",
         trad: {
           actors: ["Client", "App", "Vector DB", "LLM"],
           steps: [
@@ -482,6 +459,7 @@
         why: "Traditional RAG appends v2 next to v1 so both reach the LLM. Convergent atomically closes v1 (valid_to) inside Postgres while preserving as_of audit replay.",
       },
       2: {
+        what: "A new postmortem document (different URI) contradicts an older infrastructure spec (primary region us-east-1 → eu-central-1).",
         trad: {
           actors: ["Postmortem", "Indexer", "Vector DB", "LLM"],
           steps: [
@@ -505,6 +483,7 @@
         why: "Traditional indexes only overwrite identical filenames. Convergent supersedes conflicting facts across different URIs and physically purges stale KV keys via Valkey DEL.",
       },
       3: {
+        what: "Bob (Engineering) asks about Finance's confidential $4.2M budget, and his access is then revoked mid-session to test immediate permission enforcement.",
         trad: {
           actors: ["Bob (Eng)", "LLM", "Tool Call", "App RBAC"],
           steps: [
@@ -528,6 +507,7 @@
         why: "Traditional agent stacks hit the LLM and tools before checking RBAC. Convergent enforces OpenFGA before Top-K retrieval — and revoking Bob drops access to 0 docs instantly.",
       },
       4: {
+        what: "Carol (same Finance clearance as Alice) repeats a query to hit warm KV cache, while Bob (Engineering) submits byte-identical text to test side-channel isolation.",
         trad: {
           actors: ["Carol", "Proxy", "Shared KV", "GPU Prefill"],
           steps: [
@@ -551,6 +531,7 @@
         why: "Traditional proxies recompute cold prefill or risk cross-tenant prefix timing leaks. Convergent routes requests through per-clearance HMAC KV keys: Carol hits warm KV while Bob stays isolated.",
       },
       5: {
+        what: "Multiple parallel agents spawn sandboxes, land non-overlapping updates concurrently, test a stale conflicting write, and roll back a landed revision.",
         trad: {
           actors: ["Agents A/B", "Git Branch", "Storage", "KV Cache"],
           steps: [
@@ -655,25 +636,35 @@
       const f = STAGE_FLOWS[idx];
       if (!f) return "";
       return `
-        <div class="anim-in" style="display:flex; flex-direction:column; gap:10px;">
-          <div class="seq-dual">
-            <div class="seq-box trad">
-              <div class="between">
-                <span class="eyebrow risk">✕ Part 1 · Traditional Architecture</span>
-                <span class="badge risk" id="s${idx}_trad_state">Awaiting run</span>
-              </div>
-              ${renderSeqSvg(f.trad, `s${idx}_trad`, false)}
-            </div>
-            <div class="seq-box conv">
-              <div class="between">
-                <span class="eyebrow">✓ Part 2 · Project Convergent</span>
-                <span class="badge teal" id="s${idx}_conv_state">Awaiting run</span>
-              </div>
-              ${renderSeqSvg(f.conv, `s${idx}_conv`, true)}
-            </div>
+        <div class="anim-in" style="display:flex; flex-direction:column; gap:12px;">
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <span class="eyebrow" style="color:var(--ink-3);">1. What is it</span>
+            <p class="muted" style="color:var(--ink-2); font-size:13.5px;">${f.what}</p>
           </div>
-          <div class="arch-why"><strong>Why Convergent wins:</strong> <span>${f.why}</span></div>
-          <div id="extra-${idx}"></div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <span class="eyebrow" style="color:var(--ink-3);">2. Diagram of the run</span>
+            <div class="seq-dual">
+              <div class="seq-box trad">
+                <div class="between">
+                  <span class="eyebrow risk">✕ Part 1 · Traditional Architecture</span>
+                  <span class="badge risk" id="s${idx}_trad_state">Awaiting run</span>
+                </div>
+                ${renderSeqSvg(f.trad, `s${idx}_trad`, false)}
+              </div>
+              <div class="seq-box conv">
+                <div class="between">
+                  <span class="eyebrow">✓ Part 2 · Project Convergent</span>
+                  <span class="badge teal" id="s${idx}_conv_state">Awaiting run</span>
+                </div>
+                ${renderSeqSvg(f.conv, `s${idx}_conv`, true)}
+              </div>
+            </div>
+            <div id="extra-${idx}"></div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <span class="eyebrow">3. Why Convergent wins</span>
+            <div class="arch-why"><span>${f.why}</span></div>
+          </div>
         </div>`;
     }
 
@@ -770,19 +761,10 @@
         </div>`;
     }
 
-    function popMetric(id, text) {
-      const el = document.getElementById(id);
-      el.textContent = text;
-      el.classList.remove("pop");
-      void el.offsetWidth;
-      el.classList.add("pop");
-    }
-
     function resetBoard() {
       if (activeTimer) clearInterval(activeTimer);
       document.getElementById("progress-bar").style.width = "0%";
-      ["kpi-speedup","kpi-rag-leaks","kpi-conv-leaks","kpi-overlays",
-       "tbl-rag-stale","tbl-conv-stale","tbl-rag-cross","tbl-conv-cross",
+      ["tbl-rag-stale","tbl-conv-stale","tbl-rag-cross","tbl-conv-cross",
        "tbl-conv-revoke","tbl-conv-cache","tbl-conv-hmac","tbl-conv-overlays"].forEach(id => {
         document.getElementById(id).textContent = "—";
       });
@@ -924,15 +906,6 @@
         if (evt.event === "complete") {
           if (activeTimer) clearInterval(activeTimer);
           const k = evt.kpis;
-          popMetric("kpi-speedup", `${k.warm_speedup_x}x`);
-          document.getElementById("kpi-speedup-sub").textContent = `${k.cold_ms} ms cold → ${k.warm_ms} ms warm`;
-          popMetric("kpi-rag-leaks", `${k.rag_leaks_total}`);
-          document.getElementById("kpi-rag-leaks-sub").textContent = `${k.rag_stale_leaks} stale + ${k.rag_cross_space_leaks} cross-space`;
-          popMetric("kpi-conv-leaks", `${k.convergent_leaks_total}`);
-          document.getElementById("kpi-conv-leaks-sub").textContent = `Revoked docs: ${k.bob_docs_after_revoke} · Disjoint HMAC: ${k.disjoint_hmac_keys}`;
-          popMetric("kpi-overlays", `${k.copied_rows_on_overlay} copies`);
-          document.getElementById("kpi-overlays-sub").textContent = `Auto-rebase: ${k.auto_rebase_ok} · Conflict: ${k.conflict_caught} · Undo: ${k.undo_restored}`;
-
           document.getElementById("tbl-rag-stale").innerHTML = `<span class="badge risk">${k.rag_stale_leaks} stale blocks leaked</span>`;
           document.getElementById("tbl-conv-stale").innerHTML = `<span class="badge green">0 stale blocks</span>`;
           document.getElementById("tbl-rag-cross").innerHTML = `<span class="badge risk">${k.rag_cross_space_leaks} cross-space blocks leaked</span>`;
