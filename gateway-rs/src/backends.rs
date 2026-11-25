@@ -58,8 +58,15 @@ pub trait InferenceBackend: Send + Sync {
     ) -> (Value, Vec<String>) {
         let mut kv_keys = Vec::with_capacity(blocks.len());
         if !blocks.is_empty() {
+            // Canonical deterministic ordering maximizes KV prefix cache hits across teammates.
+            let mut ordered: Vec<&KnowledgeBlock> = blocks.iter().collect();
+            ordered.sort_by(|a, b| {
+                a.clearance_scope
+                    .cmp(&b.clearance_scope)
+                    .then_with(|| a.content_blake3.cmp(&b.content_blake3))
+            });
             let mut context_str = String::from("Authorized Context Blocks:\n");
-            for b in blocks {
+            for b in ordered {
                 let key = derive_kv_key(master_seed, &b.clearance_scope, model_id, &b.content_blake3);
                 kv_keys.push(key);
                 context_str.push_str(&format!("\n[block:{}]\n{}\n", b.content_blake3, b.canonical_text));

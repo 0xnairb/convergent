@@ -21,6 +21,14 @@ def derive_kv_key(master_seed: bytes, clearance_scope: str, model_id: str, block
     return f"cvg:kv:v1:{digest}"
 
 
+def derive_l0_answer_key(master_seed: bytes, clearance_scope: str, model_id: str, head_rev: int, query: str) -> str:
+    """Revision-bound L0 scoped cache key: auto-invalidates when head_rev advances and stays disjoint across clearances."""
+    scope_secret = hmac.new(master_seed, b"cvg:l0:v1:" + clearance_scope.encode("utf-8"), hashlib.sha256).digest()
+    norm_q = " ".join(query.strip().lower().split())
+    digest = hmac.new(scope_secret, f"{model_id}:r{head_rev}:{norm_q}".encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"cvg:l0:v1:{digest}"
+
+
 def register_kv_key(valkey: redis.Redis, block_blake3: str, kv_key: str, payload: str = "warm", ttl_secs: int = 3600) -> None:
     """Track an active KV entry under its block index so supersession eviction is O(k)."""
     pipe = valkey.pipeline()

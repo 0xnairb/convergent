@@ -123,7 +123,7 @@ def read_mount_view(
         FROM knowledge_blocks kb
         JOIN documents d ON d.id = kb.document_id
         WHERE kb.org_id = %s AND kb.space_id = %s AND kb.valid_to IS NULL
-        ORDER BY kb.landed_rev DESC, kb.valid_from DESC
+        ORDER BY kb.landed_rev ASC, kb.content_blake3 ASC
         """,
         (org_id, space_id),
     ).fetchall()

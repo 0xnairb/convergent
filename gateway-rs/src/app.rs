@@ -183,6 +183,30 @@ async fn chat_completions(
             Ok(ids) => ids,
             Err(e) => return (StatusCode::BAD_GATEWAY, Json(json!({ "error": e.to_string() }))).into_response(),
         };
+
+        // Zero-LLM Fast-Deny: if OpenFGA grants 0 documents for this space/user, short-circuit before touching the LLM.
+        if allowed.is_empty() && overlay_id.is_none() {
+            let fast_ms = t0.elapsed().as_secs_f64() * 1000.0;
+            let mut resp = (
+                StatusCode::OK,
+                Json(json!({
+                    "id": format!("chatcmpl-fastdeny-{}", Uuid::new_v4().simple()),
+                    "object": "chat.completion",
+                    "choices": [{
+                        "index": 0,
+                        "message": { "role": "assistant", "content": "Access denied: no authorized context in this space." },
+                        "finish_reason": "stop"
+                    }]
+                })),
+            )
+                .into_response();
+            resp.headers_mut().insert("x-convergent-fast-deny", HeaderValue::from_static("true"));
+            resp.headers_mut().insert("x-convergent-backend", HeaderValue::from_static(state.backend.name()));
+            if let Ok(hv) = HeaderValue::from_str(&format!("{fast_ms:.2}")) {
+                resp.headers_mut().insert("x-convergent-proxy-overhead-ms", hv);
+            }
+            return resp;
+        }
         let query = body
             .get("messages")
             .and_then(|m| m.as_array())

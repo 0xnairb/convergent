@@ -29,8 +29,9 @@ sys.path.insert(0, str(ROOT / "worker-py" / "src"))
 sys.path.insert(0, str(ROOT / "examples"))
 
 from convergent_worker.ingest import register_document_openfga, resolve_openfga_store_id  # noqa: E402
-from convergent_worker.kv_evictor import derive_kv_key, evict_block_kv, register_kv_key  # noqa: E402
+from convergent_worker.kv_evictor import derive_kv_key, derive_l0_answer_key, evict_block_kv, register_kv_key  # noqa: E402
 from convergent_worker.overlays import (  # noqa: E402
+    current_head_rev,
     land_overlay,
     open_overlay,
     read_mount_view,
@@ -56,8 +57,19 @@ DEFAULT_MODEL_ID = os.environ.get("CONVERGENT_MODEL_ID", "")
 ARENA_HOST = os.environ.get("CONVERGENT_ARENA_HOST", "127.0.0.1")
 ARENA_PORT = int(os.environ.get("CONVERGENT_ARENA_PORT", "8095"))
 
-PRIMARY_REGION_V1 = "Production Infrastructure Spec (v1): Our primary production cloud region is us-east-1."
-PRIMARY_REGION_V2 = "Postmortem 42 Migration Update: Our primary production cloud region is eu-central-1."
+PRIMARY_REGION_V1 = "Production Infrastructure Spec: Primary production cloud region is us-east-1."
+PRIMARY_REGION_OPS = "Ops Deploy Checklist: Deploy all production releases to primary cloud region us-east-1."
+PRIMARY_REGION_TF = "Terraform prod.tfvars: primary_cloud_region = us-east-1 for all production clusters."
+PRIMARY_REGION_WIKI = "Engineering Onboarding Wiki: Production traffic is served from primary region us-east-1."
+PRIMARY_REGION_V2 = "Incident Postmortem 42: Primary production cloud region is now eu-central-1 (all us-east-1 docs superseded)."
+
+FINANCE_PACK_PADDING = (
+    "ACME Q4 Finance Operating Manual — Standard Accounting & Treasury Procedures: "
+    + " ".join(
+        f"Section {i}. All vendor invoices over ${i * 250} require cost-center tagging, PO matching, and quarterly variance review by FP&A."
+        for i in range(1, 45)
+    )
+)
 
 
 class ArenaEngine:
@@ -228,12 +240,51 @@ class ArenaEngine:
         short_rag = rag_ans.replace("\n", " ")[:32] + ("…" if len(rag_ans) > 32 else "")
         yield {"event": "trace", "stage": stage, "side": "trad", "step_idx": 4, "label": f'"{short_rag}"'}
 
-        # --- PART 2: Project Convergent (real OpenFGA + real Postgres + real Valkey HMAC + real Ollama) ---
+        # --- PART 2: Project Convergent (OpenFGA Pre-Filter + Zero-LLM Fast-Deny + Revision-Bound L0/L1 Smart Cache) ---
         yield {"event": "trace", "stage": stage, "side": "conv", "step_idx": 0, "label": f'POST "{short_q}"'}
+        t_conv_start = time.perf_counter()
         t_fga = time.perf_counter()
         allowed = self._fga_allowed_docs(user_id)
         fga_ms = round((time.perf_counter() - t_fga) * 1000.0, 1)
         yield {"event": "trace", "stage": stage, "side": "conv", "step_idx": 1, "label": f"OpenFGA+MVCC → {len(allowed)} allowed ({fga_ms}ms)"}
+
+        # Zero-LLM Fast-Deny when OpenFGA grants 0 documents
+        if not allowed:
+            conv_ms = round((time.perf_counter() - t_conv_start) * 1000.0, 1)
+            conv_ans = "Access denied: zero authorized documents in this space (Zero-LLM Fast-Deny)."
+            yield {"event": "trace", "stage": stage, "side": "conv", "step_idx": 2, "label": "0 authorized docs → Fast-Deny ⚡"}
+            yield {"event": "trace", "stage": stage, "side": "conv", "step_idx": 3, "label": f"LLM skipped (0ms · total {conv_ms}ms)"}
+            yield {"event": "trace", "stage": stage, "side": "conv", "step_idx": 4, "label": "Access denied (0 leaks) ✓"}
+            yield {
+                "event": "_result",
+                "result": {
+                    "prompt": prompt,
+                    "standard_rag": {
+                        "answer": rag_ans,
+                        "latency_ms": rag_ms,
+                        "stale_leaked": stale_n,
+                        "cross_space_leaked": cross_n,
+                        "blocks": rag_blocks,
+                    },
+                    "convergent": {
+                        "answer": conv_ans,
+                        "latency_ms": conv_ms,
+                        "kv_hits": 0,
+                        "kv_total": 0,
+                        "fast_deny": True,
+                        "l0_hit": False,
+                        "stale_leaked": 0,
+                        "cross_space_leaked": 0,
+                        "blocks": [],
+                    },
+                },
+            }
+            return
+
+        head_rev = current_head_rev(conn, org_id=org_id, space_id=space_id)
+        space_scope = f"space:{space_id}"
+        l0_key = derive_l0_answer_key(master_seed, space_scope, model_id, head_rev, prompt)
+        cached_l0 = self.valkey.get(l0_key)
 
         view = read_mount_view(conn, org_id=org_id, space_id=space_id)
         doc_map = dict(
@@ -257,12 +308,23 @@ class ArenaEngine:
                 "text": blk["canonical_text"],
                 "kv_key_prefix": kv_key[:24] + "...",
             })
-        yield {"event": "trace", "stage": stage, "side": "conv", "step_idx": 2, "label": f"{len(conv_blocks)} active · KV {kv_hits}/{len(conv_blocks)} · 0 leaks ✓"}
 
-        conv_ans, conv_ms = self._call_ollama([b["text"] for b in conv_blocks], prompt, model_id)
-        yield {"event": "trace", "stage": stage, "side": "conv", "step_idx": 3, "label": f"Ollama({model_id}) {conv_ms}ms"}
-        short_conv = conv_ans.replace("\n", " ")[:32] + ("…" if len(conv_ans) > 32 else "")
-        yield {"event": "trace", "stage": stage, "side": "conv", "step_idx": 4, "label": f'"{short_conv}" ✓'}
+        if cached_l0 is not None:
+            conv_ans = str(cached_l0)
+            conv_ms = round((time.perf_counter() - t_conv_start) * 1000.0, 1)
+            l0_hit = True
+            yield {"event": "trace", "stage": stage, "side": "conv", "step_idx": 2, "label": f"L0+L1 HIT ⚡ (r{head_rev} · KV {kv_hits}/{len(conv_blocks)})"}
+            yield {"event": "trace", "stage": stage, "side": "conv", "step_idx": 3, "label": f"GPU prefill bypassed ({conv_ms}ms) ⚡"}
+            short_conv = conv_ans.replace("\n", " ")[:32] + ("…" if len(conv_ans) > 32 else "")
+            yield {"event": "trace", "stage": stage, "side": "conv", "step_idx": 4, "label": f'"{short_conv}" ✓'}
+        else:
+            l0_hit = False
+            yield {"event": "trace", "stage": stage, "side": "conv", "step_idx": 2, "label": f"{len(conv_blocks)} active · KV {kv_hits}/{len(conv_blocks)} · 0 leaks ✓"}
+            conv_ans, conv_ms = self._call_ollama([b["text"] for b in conv_blocks], prompt, model_id)
+            self.valkey.set(l0_key, conv_ans, ex=3600)
+            yield {"event": "trace", "stage": stage, "side": "conv", "step_idx": 3, "label": f"Ollama({model_id}) {conv_ms}ms"}
+            short_conv = conv_ans.replace("\n", " ")[:32] + ("…" if len(conv_ans) > 32 else "")
+            yield {"event": "trace", "stage": stage, "side": "conv", "step_idx": 4, "label": f'"{short_conv}" ✓'}
 
         yield {
             "event": "_result",
@@ -280,6 +342,8 @@ class ArenaEngine:
                     "latency_ms": conv_ms,
                     "kv_hits": kv_hits,
                     "kv_total": len(conv_blocks),
+                    "fast_deny": False,
+                    "l0_hit": l0_hit,
                     "stale_leaked": 0,
                     "cross_space_leaked": 0,
                     "blocks": conv_blocks,
@@ -308,10 +372,11 @@ class ArenaEngine:
             self._fga_write(f"user:{user}", "viewer", f"space:{sid}")
 
         with psycopg.connect(PG_DSN, autocommit=True) as conn:
-            # Seed Finance r1 -> r2 (Travel $500 -> $1,200) and Engineering r1 -> r2 (us-east-1 -> eu-central-1)
+            # Seed Finance r1 -> r2 (Travel $500 -> $1,200 + realistic Finance Operating Manual for measurable prefill)
             ov_f1 = open_overlay(conn, org_id=org_id, space_id=space_finance, owner=alice)
             stage_delta(conn, overlay_id=ov_f1.overlay_id, source_uri="policy://travel-policy.md", text=TRAVEL_POLICY_V1)
             stage_delta(conn, overlay_id=ov_f1.overlay_id, source_uri="finance://q4-helios-budget.md", text=FINANCE_HELIOS_BUDGET)
+            stage_delta(conn, overlay_id=ov_f1.overlay_id, source_uri="finance://operating-manual.md", text=FINANCE_PACK_PADDING)
             stage_delta(conn, overlay_id=ov_f1.overlay_id, source_uri="secret://helios-code.md", text=IDENTICAL_SECRET_TEXT)
             land_overlay(conn, overlay_id=ov_f1.overlay_id, author=alice, message="Finance baseline v1")
 
@@ -320,15 +385,22 @@ class ArenaEngine:
             land_overlay(conn, overlay_id=ov_f2.overlay_id, author="cfo-memo", message="Supersede travel cap -> $1,200")
             self._sync_docs(conn, org_id, space_finance)
 
+            # Seed Engineering r1 -> r2: 4 stale cross-URI docs say us-east-1; Postmortem 42 supersedes all 4 -> eu-central-1
             ov_e1 = open_overlay(conn, org_id=org_id, space_id=space_eng, owner=bob)
             stage_delta(conn, overlay_id=ov_e1.overlay_id, source_uri="infra://primary-region.md", text=PRIMARY_REGION_V1)
+            stage_delta(conn, overlay_id=ov_e1.overlay_id, source_uri="ops://deploy-checklist.md", text=PRIMARY_REGION_OPS)
+            stage_delta(conn, overlay_id=ov_e1.overlay_id, source_uri="terraform://prod-vars.tf", text=PRIMARY_REGION_TF)
+            stage_delta(conn, overlay_id=ov_e1.overlay_id, source_uri="wiki://onboarding-infra.md", text=PRIMARY_REGION_WIKI)
             stage_delta(conn, overlay_id=ov_e1.overlay_id, source_uri="eng://helios-architecture.md", text=ENG_HELIOS_ARCH)
             stage_delta(conn, overlay_id=ov_e1.overlay_id, source_uri="secret://helios-code.md", text=IDENTICAL_SECRET_TEXT)
-            land_overlay(conn, overlay_id=ov_e1.overlay_id, author=bob, message="Engineering baseline v1")
+            land_overlay(conn, overlay_id=ov_e1.overlay_id, author=bob, message="Engineering baseline v1 (4 us-east-1 docs)")
 
             ov_e2 = open_overlay(conn, org_id=org_id, space_id=space_eng, owner="postmortem-42")
             stage_delta(conn, overlay_id=ov_e2.overlay_id, source_uri="infra://primary-region.md", text=PRIMARY_REGION_V2)
-            land_overlay(conn, overlay_id=ov_e2.overlay_id, author="postmortem-42", message="Migrate region -> eu-central-1")
+            stage_delta(conn, overlay_id=ov_e2.overlay_id, source_uri="ops://deploy-checklist.md", op="retract")
+            stage_delta(conn, overlay_id=ov_e2.overlay_id, source_uri="terraform://prod-vars.tf", op="retract")
+            stage_delta(conn, overlay_id=ov_e2.overlay_id, source_uri="wiki://onboarding-infra.md", op="retract")
+            land_overlay(conn, overlay_id=ov_e2.overlay_id, author="postmortem-42", message="Supersede all 4 us-east-1 docs -> eu-central-1")
             self._sync_docs(conn, org_id, space_eng)
 
             # STEP 1: Bi-Temporal Truth (Travel Policy $500 -> $1,200)
@@ -367,7 +439,9 @@ class ArenaEngine:
                     yield ev
             yield {"event": "step", "index": 2, "id": "cross_uri_supersession", "title": "Cross-Document Supersession (us-east-1 → eu-central-1)", "data": s2}
 
-            # STEP 3: Hard Space Isolation & Instant Revocation (Bob asks Finance budget)
+            # STEP 3: Hard Space Isolation & Instant Revoke (Zero-LLM Fast-Deny!)
+            # Revoke Bob's OpenFGA access to verify <3ms Zero-LLM Fast-Deny vs Traditional full LLM leak
+            self._fga_write(f"user:{bob}", "viewer", f"space:{space_eng}", delete=True)
             s3: dict[str, Any] = {}
             for ev in self._compare_query_traced(
                 conn,
@@ -383,11 +457,9 @@ class ArenaEngine:
                     s3 = ev["result"]
                 else:
                     yield ev
-            self._fga_write(f"user:{bob}", "viewer", f"space:{space_eng}", delete=True)
             bob_docs_after_revoke = len(self._fga_allowed_docs(bob))
             self._fga_write(f"user:{bob}", "viewer", f"space:{space_eng}", delete=False)
             s3["bob_docs_after_revoke"] = bob_docs_after_revoke
-            yield {"event": "trace", "stage": 3, "side": "conv", "step_idx": 4, "label": f"Revoke(bob) → {bob_docs_after_revoke} docs ✓"}
             yield {"event": "step", "index": 3, "id": "private_context", "title": "Hard Space Isolation & Instant Revoke", "data": s3}
 
             # STEP 4: Smart Cache & Cryptographic Side-Channel Isolation (Cold Alice -> Warm Carol -> Disjoint Bob)
