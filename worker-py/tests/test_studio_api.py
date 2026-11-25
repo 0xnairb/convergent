@@ -27,9 +27,17 @@ def test_studio_mvp_gui_endpoints() -> None:
             html = http.get(f"{url}/")
             assert html.status_code == 200
             assert "Project Convergent" in html.text
-            assert "Side-by-Side Arena" in html.text
+            assert "Configure Ollama" in html.text
 
-            # 2. Initial seeded state has finance & engineering at r2
+            # 2. Ollama model auto-discovery & runtime reconfiguration
+            ol = http.get(f"{url}/api/ollama/models").raise_for_status().json()
+            assert "models" in ol and "ollama_url" in ol
+            if ol["models"]:
+                chosen = ol["models"][0]["name"]
+                cfg_state = http.post(f"{url}/api/config", json={"model_id": chosen}).raise_for_status().json()
+                assert cfg_state["ollama"]["model_id"] == chosen
+
+            # 3. Initial seeded state has finance & engineering at r2
             state = http.get(f"{url}/api/state").raise_for_status().json()
             assert state["spaces"]["finance"]["head_rev"] == 2
             assert state["spaces"]["engineering"]["head_rev"] == 2

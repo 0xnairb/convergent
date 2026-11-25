@@ -1,10 +1,7 @@
-"""Convergent Studio: Interactive MVP Web GUI backend for Project Convergent.
+"""Convergent Studio: Minimal, interactive MVP Web GUI backend for Project Convergent.
 
-Serves a single-page Web GUI (`studio/index.html`) backed by live PostgreSQL 17,
-Valkey 8, OpenFGA 1.8.5, and local Ollama (`granite4.2:3b` by default) to demonstrate:
-  - Side-by-Side Arena: Standard RAG vs. Project Convergent
-  - Layered Overlays & Server-Authoritative Changesets (0-byte open, stage, auto-rebase land, conflict, undo)
-  - Live Private Context Isolation (OpenFGA + disjoint HMAC-SHA256 KV keys + instant revoke)
+Connects to live PostgreSQL 17, Valkey 8, OpenFGA 1.8.5, and any user-configured
+Ollama instance (auto-discovering installed models via /api/tags — no hard-coded model).
 
 Usage:
     cd convergent/worker-py && uv run python ../studio/server.py
@@ -54,8 +51,8 @@ PG_DSN = os.environ.get(
 )
 VALKEY_URL = os.environ.get("CONVERGENT_VALKEY_URL", "redis://127.0.0.1:56379/0")
 OPENFGA_URL = os.environ.get("CONVERGENT_OPENFGA_URL", "http://127.0.0.1:58080")
-OLLAMA_URL = os.environ.get("CONVERGENT_VLLM_URL", "http://127.0.0.1:11434")
-MODEL_ID = os.environ.get("CONVERGENT_MODEL_ID", "granite4.2:3b")
+DEFAULT_OLLAMA_URL = os.environ.get("CONVERGENT_VLLM_URL", "http://127.0.0.1:11434")
+DEFAULT_MODEL_ID = os.environ.get("CONVERGENT_MODEL_ID", "")
 STUDIO_HOST = os.environ.get("CONVERGENT_STUDIO_HOST", "127.0.0.1")
 STUDIO_PORT = int(os.environ.get("CONVERGENT_STUDIO_PORT", "8095"))
 
@@ -69,12 +66,65 @@ class StudioWorkspace:
     def __init__(self) -> None:
         self.master_seed = b"convergent-studio-seed"
         self.valkey = redis.Redis.from_url(VALKEY_URL, decode_responses=True)
-        self.http = httpx.Client(timeout=60.0)
+        self.http = httpx.Client(timeout=90.0)
         self.store_id = resolve_openfga_store_id(self.http, OPENFGA_URL, "convergent")
+        self.ollama_url = DEFAULT_OLLAMA_URL.rstrip("/")
+        self.available_models: list[dict[str, Any]] = []
+        self.ollama_connected = False
+        self.ollama_error: str | None = None
+        self.model_id = DEFAULT_MODEL_ID
+        self.refresh_ollama_models(self.ollama_url)
         self.org_id = uuid.uuid4()
         self.spaces: dict[str, uuid.UUID] = {}
         self.principals: dict[str, dict[str, Any]] = {}
         self.reset()
+
+    def refresh_ollama_models(self, url: str | None = None) -> dict[str, Any]:
+        target = (url or self.ollama_url).strip().rstrip("/")
+        if not target:
+            target = "http://127.0.0.1:11434"
+        try:
+            resp = self.http.get(f"{target}/api/tags", timeout=5.0)
+            resp.raise_for_status()
+            raw_models = resp.json().get("models") or []
+            models: list[dict[str, Any]] = []
+            for m in raw_models:
+                details = m.get("details") or {}
+                size_bytes = int(m.get("size") or 0)
+                models.append({
+                    "name": str(m.get("name") or m.get("model") or ""),
+                    "size_gb": round(size_bytes / (1024 ** 3), 1) if size_bytes else 0.0,
+                    "parameter_size": str(details.get("parameter_size") or ""),
+                    "quantization": str(details.get("quantization_level") or ""),
+                    "family": str(details.get("family") or ""),
+                })
+            models = [m for m in models if m["name"]]
+            self.ollama_url = target
+            self.available_models = models
+            self.ollama_connected = True
+            self.ollama_error = None
+            names = [m["name"] for m in models]
+            if not self.model_id or self.model_id not in names:
+                self.model_id = names[0] if names else ""
+        except Exception as exc:
+            self.ollama_url = target
+            self.available_models = []
+            self.ollama_connected = False
+            self.ollama_error = str(exc)
+        return {
+            "ollama_url": self.ollama_url,
+            "connected": self.ollama_connected,
+            "error": self.ollama_error,
+            "model_id": self.model_id,
+            "models": self.available_models,
+        }
+
+    def configure_ollama(self, *, ollama_url: str | None = None, model_id: str | None = None) -> dict[str, Any]:
+        if ollama_url is not None and ollama_url.strip():
+            self.refresh_ollama_models(ollama_url.strip())
+        if model_id is not None and model_id.strip():
+            self.model_id = model_id.strip()
+        return self.get_state()
 
     def _fga_write(self, user: str, relation: str, obj: str, delete: bool = False) -> None:
         key = "deletes" if delete else "writes"
@@ -131,27 +181,23 @@ class StudioWorkspace:
             self._fga_write(f"user:{p['id']}", "viewer", f"space:{sid}")
 
         with psycopg.connect(PG_DSN, autocommit=True) as conn:
-            # Finance r1: travel v1 + budget + shared secret
             ov_f1 = open_overlay(conn, org_id=self.org_id, space_id=self.spaces["finance"], owner="alice")
             stage_delta(conn, overlay_id=ov_f1.overlay_id, source_uri="policy://travel-policy.md", text=TRAVEL_POLICY_V1)
             stage_delta(conn, overlay_id=ov_f1.overlay_id, source_uri="finance://q4-helios-budget.md", text=FINANCE_HELIOS_BUDGET)
             stage_delta(conn, overlay_id=ov_f1.overlay_id, source_uri="secret://helios-code.md", text=IDENTICAL_SECRET_TEXT)
             land_overlay(conn, overlay_id=ov_f1.overlay_id, author="alice", message="Initial Finance baseline (Travel v1 = $500)")
 
-            # Finance r2: supersede travel policy with v2 ($1,200)
             ov_f2 = open_overlay(conn, org_id=self.org_id, space_id=self.spaces["finance"], owner="alice")
             stage_delta(conn, overlay_id=ov_f2.overlay_id, source_uri="policy://travel-policy.md", text=TRAVEL_POLICY_V2)
             land_overlay(conn, overlay_id=ov_f2.overlay_id, author="cfo-memo", message="Q4 Update: Raise travel cap to $1,200")
             self._sync_space_docs_to_openfga(conn, self.spaces["finance"])
 
-            # Engineering r1: primary region v1 (us-east-1) + arch + identical secret
             ov_e1 = open_overlay(conn, org_id=self.org_id, space_id=self.spaces["engineering"], owner="bob")
             stage_delta(conn, overlay_id=ov_e1.overlay_id, source_uri="infra://primary-region.md", text=PRIMARY_REGION_V1)
             stage_delta(conn, overlay_id=ov_e1.overlay_id, source_uri="eng://helios-architecture.md", text=ENG_HELIOS_ARCH)
             stage_delta(conn, overlay_id=ov_e1.overlay_id, source_uri="secret://helios-code.md", text=IDENTICAL_SECRET_TEXT)
             land_overlay(conn, overlay_id=ov_e1.overlay_id, author="bob", message="Initial Engineering baseline (us-east-1)")
 
-            # Engineering r2: supersede primary region -> eu-central-1
             ov_e2 = open_overlay(conn, org_id=self.org_id, space_id=self.spaces["engineering"], owner="bob")
             stage_delta(conn, overlay_id=ov_e2.overlay_id, source_uri="infra://primary-region.md", text=PRIMARY_REGION_V2)
             land_overlay(conn, overlay_id=ov_e2.overlay_id, author="postmortem-42", message="Migrate primary prod region to eu-central-1")
@@ -210,8 +256,13 @@ class StudioWorkspace:
                 }
         return {
             "org_id": str(self.org_id),
-            "model_id": MODEL_ID,
-            "ollama_url": OLLAMA_URL,
+            "ollama": {
+                "url": self.ollama_url,
+                "connected": self.ollama_connected,
+                "error": self.ollama_error,
+                "model_id": self.model_id,
+                "models": self.available_models,
+            },
             "principals": self.principals,
             "spaces": spaces_state,
         }
@@ -247,7 +298,6 @@ class StudioWorkspace:
             res = land_overlay(conn, overlay_id=oid, author=author, message=message, force=force)
             if res.status == "landed":
                 self._sync_space_docs_to_openfga(conn, sid)
-                # Evict superseded KV keys in Valkey immediately
                 for old_id in res.superseded_block_ids:
                     hrow = conn.execute("SELECT content_blake3 FROM knowledge_blocks WHERE id = %s", (old_id,)).fetchone()
                     if hrow:
@@ -277,17 +327,19 @@ class StudioWorkspace:
             "state": self.get_state(),
         }
 
-    def _call_ollama(self, context_blocks: list[str], prompt: str) -> tuple[str, float]:
+    def _call_ollama(self, context_blocks: list[str], prompt: str, model_id: str) -> tuple[str, float]:
+        if not model_id:
+            return "[No Ollama model selected — configure Ollama in the top bar.]", 0.0
         t0 = time.perf_counter()
         ctx = "\n".join(f"- {b}" for b in context_blocks) if context_blocks else "(No authorized context available.)"
         try:
             resp = self.http.post(
-                f"{OLLAMA_URL.rstrip('/')}/api/chat",
+                f"{self.ollama_url}/api/chat",
                 json={
-                    "model": MODEL_ID,
+                    "model": model_id,
                     "stream": False,
                     "think": False,
-                    "options": {"temperature": 0.0, "num_predict": 140},
+                    "options": {"temperature": 0.0, "num_predict": 160},
                     "messages": [
                         {
                             "role": "system",
@@ -300,18 +352,25 @@ class StudioWorkspace:
             resp.raise_for_status()
             ans = str(resp.json()["message"]["content"]).strip()
         except Exception as exc:
-            ans = f"[Ollama unavailable: {exc}]"
+            ans = f"[Ollama error on {model_id} @ {self.ollama_url}: {exc}]"
         return ans, round((time.perf_counter() - t0) * 1000.0, 1)
 
-    def run_arena(self, *, persona: str, prompt: str, overlay_id: str | None = None) -> dict[str, Any]:
+    def run_arena(
+        self,
+        *,
+        persona: str,
+        prompt: str,
+        overlay_id: str | None = None,
+        model_id: str | None = None,
+    ) -> dict[str, Any]:
         p = self.principals.get(persona)
         if not p:
             raise ValueError(f"unknown persona: {persona}")
+        active_model = (model_id or self.model_id).strip()
         space_name = p["space"]
         sid = self.spaces[space_name]
 
         with psycopg.connect(PG_DSN, autocommit=True) as conn:
-            # 1. STANDARD RAG BASELINE (no OpenFGA pre-filter, no bi-temporal supersession — retrieves stale & cross-space!)
             rag_rows = conn.execute(
                 """
                 SELECT d.source_uri, kb.canonical_text, kb.valid_to IS NOT NULL AS is_stale, kb.space_id <> %s AS cross_space
@@ -329,12 +388,10 @@ class StudioWorkspace:
                 for uri, txt, stale, cross in rag_rows
             ]
 
-            # 2. PROJECT CONVERGENT (OpenFGA pre-filtered + active-only + zero-copy Mount Stack Overlay + HMAC KV isolation)
             allowed_docs = set(self._fga_allowed_docs(p["id"]))
             oid = uuid.UUID(overlay_id) if overlay_id else None
             view = read_mount_view(conn, org_id=self.org_id, space_id=sid, overlay_id=oid)
 
-            # Filter base blocks by OpenFGA allowed_docs (overlay deltas owned by caller remain visible)
             doc_map = dict(
                 conn.execute(
                     "SELECT id::text, document_id FROM knowledge_blocks WHERE org_id = %s AND space_id = %s AND valid_to IS NULL",
@@ -343,14 +400,12 @@ class StudioWorkspace:
             )
             conv_blocks: list[dict[str, Any]] = []
             kv_hits = 0
-            kv_keys_used: list[str] = []
             for blk in view:
                 if blk["layer"] == "base":
                     doc_id = doc_map.get(blk["id"])
                     if doc_id not in allowed_docs:
                         continue
-                kv_key = derive_kv_key(self.master_seed, blk["clearance_scope"], MODEL_ID, blk["content_blake3"])
-                kv_keys_used.append(kv_key)
+                kv_key = derive_kv_key(self.master_seed, blk["clearance_scope"], active_model or "default", blk["content_blake3"])
                 if self.valkey.exists(kv_key):
                     kv_hits += 1
                 else:
@@ -360,15 +415,16 @@ class StudioWorkspace:
                     "text": blk["canonical_text"],
                     "layer": blk["layer"],
                     "clearance_scope": blk["clearance_scope"],
-                    "kv_key_prefix": kv_key[:26] + "...",
+                    "kv_key_prefix": kv_key[:24] + "...",
                     "citations": blk["citations"],
                 })
 
-        rag_answer, rag_ms = self._call_ollama([b["text"] for b in rag_blocks], prompt)
-        conv_answer, conv_ms = self._call_ollama([b["text"] for b in conv_blocks], prompt)
+        rag_answer, rag_ms = self._call_ollama([b["text"] for b in rag_blocks], prompt, active_model)
+        conv_answer, conv_ms = self._call_ollama([b["text"] for b in conv_blocks], prompt, active_model)
 
         return {
             "persona": p,
+            "model_id": active_model,
             "prompt": prompt,
             "overlay_id": overlay_id,
             "standard_rag": {
@@ -417,37 +473,10 @@ def make_studio_handler(ws: StudioWorkspace) -> type[BaseHTTPRequestHandler]:
                 self._send(200, "text/html; charset=utf-8", html_bytes)
             elif parsed.path == "/api/state":
                 self._json(200, ws.get_state())
-            elif parsed.path == "/api/history":
+            elif parsed.path == "/api/ollama/models":
                 qs = parse_qs(parsed.query)
-                uri = (qs.get("source_uri") or [""])[0]
-                with psycopg.connect(PG_DSN, autocommit=True) as conn:
-                    rows = conn.execute(
-                        """
-                        SELECT kb.id, kb.canonical_text, kb.valid_from, kb.valid_to, kb.superseded_by, kb.landed_rev
-                        FROM knowledge_blocks kb
-                        JOIN documents d ON d.id = kb.document_id
-                        WHERE kb.org_id = %s AND d.source_uri = %s
-                        ORDER BY kb.valid_from DESC
-                        """,
-                        (ws.org_id, uri),
-                    ).fetchall()
-                self._json(
-                    200,
-                    {
-                        "source_uri": uri,
-                        "history": [
-                            {
-                                "id": str(r[0]),
-                                "text": r[1],
-                                "valid_from": r[2].isoformat(),
-                                "valid_to": r[3].isoformat() if r[3] else None,
-                                "superseded_by": str(r[4]) if r[4] else None,
-                                "landed_rev": int(r[5]),
-                            }
-                            for r in rows
-                        ],
-                    },
-                )
+                url = (qs.get("url") or [None])[0]
+                self._json(200, ws.refresh_ollama_models(url))
             else:
                 self._json(404, {"error": "not_found"})
 
@@ -456,6 +485,14 @@ def make_studio_handler(ws: StudioWorkspace) -> type[BaseHTTPRequestHandler]:
                 body = self._body()
                 if self.path == "/api/reset":
                     self._json(200, ws.reset())
+                elif self.path == "/api/config":
+                    self._json(
+                        200,
+                        ws.configure_ollama(
+                            ollama_url=body.get("ollama_url"),
+                            model_id=body.get("model_id"),
+                        ),
+                    )
                 elif self.path == "/api/arena":
                     self._json(
                         200,
@@ -463,6 +500,7 @@ def make_studio_handler(ws: StudioWorkspace) -> type[BaseHTTPRequestHandler]:
                             persona=body.get("persona", "alice"),
                             prompt=body.get("prompt", ""),
                             overlay_id=body.get("overlay_id") or None,
+                            model_id=body.get("model_id") or None,
                         ),
                     )
                 elif self.path == "/api/principals/toggle":
@@ -516,8 +554,8 @@ def make_studio_handler(ws: StudioWorkspace) -> type[BaseHTTPRequestHandler]:
 def main() -> None:
     ws = StudioWorkspace()
     server = ThreadingHTTPServer((STUDIO_HOST, STUDIO_PORT), make_studio_handler(ws))
-    print(f"\n  Project Convergent Studio running at http://{STUDIO_HOST}:{STUDIO_PORT}")
-    print(f"  Model: {MODEL_ID} ({OLLAMA_URL}) | Postgres + Valkey + OpenFGA live\n")
+    print(f"\n  Project Convergent Studio -> http://{STUDIO_HOST}:{STUDIO_PORT}")
+    print(f"  Ollama: {ws.ollama_url} | Active Model: {ws.model_id or '(none detected)'} ({len(ws.available_models)} available)\n")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
