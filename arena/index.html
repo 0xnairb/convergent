@@ -193,113 +193,26 @@
       background: linear-gradient(180deg, rgba(20,184,166,0.05) 0%, var(--surface) 40%);
     }
 
-    /* Dual-Track Architecture Visualizer (Part 1: Traditional vs Part 2: Convergent) */
-    .arch-dual {
-      display: flex; flex-direction: column; gap: 10px;
-      padding: 12px 14px; background: var(--bg);
-      border: 1px solid var(--hairline); border-radius: 10px;
+    /* Dual Sequence Diagram Container (Part 1: Traditional vs Part 2: Convergent) */
+    .seq-dual {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px;
     }
-    .arch-track {
-      display: grid; grid-template-columns: 118px 1fr; align-items: center; gap: 12px;
+    @media (max-width: 980px) { .seq-dual { grid-template-columns: 1fr; } }
+    .seq-box {
+      background: var(--bg); border: 1px solid var(--hairline);
+      border-radius: 11px; padding: 12px 14px 10px;
+      display: flex; flex-direction: column; gap: 8px;
     }
-    @media (max-width: 720px) { .arch-track { grid-template-columns: 1fr; gap: 6px; } }
-    .track-label {
-      font-family: var(--font-mono); font-size: 10.5px; font-weight: 700;
-      text-transform: uppercase; letter-spacing: 0.08em;
-      display: flex; align-items: center; gap: 6px;
-    }
-    .track-label.trad { color: var(--risk); }
-    .track-label.conv { color: var(--teal); }
-    .track-nodes {
-      display: flex; align-items: center; gap: 0; overflow-x: auto; padding: 3px 0;
-    }
-    .anode {
-      position: relative; flex-shrink: 0;
-      font-family: var(--font-mono); font-size: 11px; font-weight: 600;
-      padding: 6px 10px; border-radius: 7px;
-      background: var(--surface); border: 1px solid var(--hairline-strong);
-      color: var(--ink-2); white-space: nowrap;
-      display: flex; flex-direction: column; gap: 2px;
-    }
-    .anode small { font-size: 9.5px; font-weight: 500; color: var(--ink-3); }
-    .anode.hit-risk {
-      border-color: var(--risk-bd); background: var(--risk-bg); color: #fecaca;
-      animation: nodePulseRisk 2.4s ease-in-out infinite;
-    }
-    .anode.hit-teal {
-      border-color: var(--teal-bd); background: var(--teal-bg); color: #99f6e4;
-      animation: nodePulseTeal 2.0s ease-in-out infinite;
-    }
-    .anode.hit-green {
-      border-color: var(--green-bd); background: var(--green-bg); color: #bbf7d0;
-      animation: nodePulseGreen 1.8s ease-in-out infinite;
-    }
-    .anode.hit-purple {
-      border-color: var(--purple-bd); background: var(--purple-bg); color: #e9d5ff;
-      animation: nodePulsePurple 2.0s ease-in-out infinite;
-    }
-    .alink {
-      position: relative; flex: 1; min-width: 28px; height: 2px;
-      background: var(--hairline-strong); overflow: visible;
-    }
-    .alink::after {
-      content: ""; position: absolute; right: -1px; top: -3px;
-      border-top: 4px solid transparent; border-bottom: 4px solid transparent;
-      border-left: 5px solid var(--hairline-strong);
-    }
-    .packet {
-      position: absolute; top: -3px; left: 0; width: 10px; height: 8px;
-      border-radius: 999px; pointer-events: none;
-    }
-    .packet.trad {
-      background: var(--risk); box-shadow: 0 0 10px var(--risk);
-      animation: packetSlow 2.6s linear infinite;
-    }
-    .packet.conv {
-      background: var(--teal); box-shadow: 0 0 10px var(--teal);
-      animation: packetFast 1.35s linear infinite;
-    }
-    .packet.cache {
-      background: var(--green); box-shadow: 0 0 12px var(--green);
-      animation: packetFast 1.05s linear infinite;
-    }
-    .packet.overlay {
-      background: var(--purple); box-shadow: 0 0 12px var(--purple);
-      animation: packetFast 1.25s linear infinite;
-    }
-    @keyframes packetSlow {
-      0% { left: 0%; opacity: 0; }
-      15% { opacity: 1; }
-      85% { opacity: 1; }
-      100% { left: calc(100% - 10px); opacity: 0; }
-    }
-    @keyframes packetFast {
-      0% { left: 0%; opacity: 0; }
-      15% { opacity: 1; }
-      85% { opacity: 1; }
-      100% { left: calc(100% - 10px); opacity: 0; }
-    }
-    @keyframes nodePulseRisk {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.25); }
-      50% { box-shadow: 0 0 14px 1px rgba(248, 113, 113, 0.35); }
-    }
-    @keyframes nodePulseTeal {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.25); }
-      50% { box-shadow: 0 0 14px 1px rgba(20, 184, 166, 0.4); }
-    }
-    @keyframes nodePulseGreen {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.25); }
-      50% { box-shadow: 0 0 14px 1px rgba(34, 197, 94, 0.42); }
-    }
-    @keyframes nodePulsePurple {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.25); }
-      50% { box-shadow: 0 0 14px 1px rgba(168, 85, 247, 0.4); }
-    }
+    .seq-box.trad { border-color: var(--risk-bd); background: linear-gradient(180deg, rgba(248,113,113,0.05) 0%, var(--bg) 35%); }
+    .seq-box.conv { border-color: var(--teal-bd); background: linear-gradient(180deg, rgba(20,184,166,0.06) 0%, var(--bg) 35%); }
+    .seq-svg { width: 100%; height: auto; display: block; overflow: visible; }
     .arch-why {
-      font-size: 12px; color: var(--ink-3); border-top: 1px solid var(--hairline);
-      padding-top: 8px; display: flex; align-items: center; gap: 8px;
+      font-size: 12px; color: var(--ink-3);
+      background: var(--bg); border: 1px solid var(--hairline);
+      border-radius: 8px; padding: 9px 12px;
+      display: flex; align-items: center; gap: 8px;
     }
-    .arch-why strong { color: var(--teal); }
+    .arch-why strong { color: var(--teal); white-space: nowrap; }
 
     /* Comparison Bars */
     .bar-group { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
@@ -546,109 +459,221 @@
   <script>
     const STAGE_FLOWS = {
       1: {
-        trad: [
-          { t: "Request", s: "Travel Cap?" },
-          { t: "Vector DB", s: "v1 $500 + v2 $1,200", cls: "hit-risk" },
-          { t: "LLM", s: "Sees conflicting docs", cls: "hit-risk" },
-          { t: "Response", s: "Stale leak risk" },
-        ],
-        conv: [
-          { t: "Request", s: "Travel Cap?" },
-          { t: "Bi-Temporal Gate", s: "valid_to IS NULL", cls: "hit-teal" },
-          { t: "Active v2 Only", s: "$1,200 + citation", cls: "hit-green" },
-          { t: "LLM", s: "Clean current truth" },
-        ],
-        packetCls: "conv",
-        why: "Traditional RAG appends v2 beside v1 so both enter the prompt. Convergent atomically closes v1 (valid_to) while preserving as_of audit replay.",
+        trad: {
+          actors: ["Client", "App", "Vector DB", "LLM"],
+          steps: [
+            { from: 0, to: 1, label: 'POST "Travel cap?"', color: "#94a3b8" },
+            { from: 1, to: 2, label: "top_k(5) cosine", color: "#94a3b8" },
+            { from: 2, to: 1, label: "[v1 $500, v2 $1,200] ⚠ STALE", color: "#f87171", dashed: true },
+            { from: 1, to: 3, label: "prompt(both conflicting docs)", color: "#f87171" },
+            { from: 3, to: 0, label: "ambiguous / leaks $500 ✕", color: "#f87171", dashed: true },
+          ],
+        },
+        conv: {
+          actors: ["Client", "Gateway", "Postgres 17", "LLM"],
+          steps: [
+            { from: 0, to: 1, label: 'POST "Travel cap?"', color: "#14b8a6" },
+            { from: 1, to: 2, label: "WHERE valid_to IS NULL", color: "#14b8a6" },
+            { from: 2, to: 1, label: "[v2 $1,200 + citation]", color: "#22c55e", dashed: true },
+            { from: 1, to: 3, label: "prompt(active v2 only)", color: "#14b8a6" },
+            { from: 3, to: 0, label: '"$1,200 per trip." ✓', color: "#22c55e", dashed: true },
+          ],
+        },
+        why: "Traditional RAG appends v2 next to v1 so both reach the LLM. Convergent atomically closes v1 (valid_to) inside Postgres while preserving as_of audit replay.",
       },
       2: {
-        trad: [
-          { t: "Postmortem 42", s: "eu-central-1" },
-          { t: "Flat Index", s: "Old us-east-1 stays", cls: "hit-risk" },
-          { t: "LLM", s: "Retrieves both URIs", cls: "hit-risk" },
-          { t: "Hallucination", s: "Stale us-east-1" },
-        ],
-        conv: [
-          { t: "Postmortem 42", s: "eu-central-1" },
-          { t: "Supersede Engine", s: "Closes old URI", cls: "hit-teal" },
-          { t: "Valkey DEL", s: "Purges stale KV", cls: "hit-purple" },
-          { t: "LLM", s: "Only eu-central-1", cls: "hit-green" },
-        ],
-        packetCls: "conv",
-        why: "Traditional stacks only overwrite identical filenames. Convergent supersedes conflicting facts across different URIs and evicts stale KV tensors immediately.",
+        trad: {
+          actors: ["Postmortem", "Indexer", "Vector DB", "LLM"],
+          steps: [
+            { from: 0, to: 1, label: "ingest(eu-central-1)", color: "#94a3b8" },
+            { from: 1, to: 2, label: "INSERT new URI", color: "#94a3b8" },
+            { from: 2, to: 2, label: "old us-east-1 stays active ⚠", color: "#f87171" },
+            { from: 2, to: 3, label: "query retrieves BOTH URIs", color: "#f87171" },
+            { from: 3, to: 0, label: 'hallucinates "us-east-1" ✕', color: "#f87171", dashed: true },
+          ],
+        },
+        conv: {
+          actors: ["Postmortem", "Worker", "Postgres", "Valkey/KV"],
+          steps: [
+            { from: 0, to: 1, label: "ingest(eu-central-1)", color: "#14b8a6" },
+            { from: 1, to: 2, label: "supersede old URI (ACID)", color: "#14b8a6" },
+            { from: 1, to: 3, label: "DEL(old_kv_key) ⚡", color: "#a855f7" },
+            { from: 2, to: 1, label: "only eu-central-1 active ✓", color: "#22c55e", dashed: true },
+            { from: 1, to: 0, label: 'LLM answers "eu-central-1" ✓', color: "#22c55e", dashed: true },
+          ],
+        },
+        why: "Traditional indexes only overwrite identical filenames. Convergent supersedes conflicting facts across different URIs and physically purges stale KV keys via Valkey DEL.",
       },
       3: {
-        trad: [
-          { t: "Request (Bob)", s: "Engineering" },
-          { t: "LLM", s: "Prompt hits LLM first", cls: "hit-risk" },
-          { t: "Tool Call", s: "Fetches all spaces" },
-          { t: "Post-RBAC", s: "Late / leaky filter", cls: "hit-risk" },
-        ],
-        conv: [
-          { t: "Request (Bob)", s: "Engineering" },
-          { t: "OpenFGA Gate", s: "Pre-filter before Top-K", cls: "hit-teal" },
-          { t: "Memory Layer", s: "0 Finance docs", cls: "hit-green" },
-          { t: "LLM", s: "Zero leakage" },
-        ],
-        packetCls: "conv",
-        why: "Traditional agent flows hit the LLM & tools before checking RBAC (leaking private context or stale caches). Convergent enforces OpenFGA before retrieval and revokes in <10ms.",
+        trad: {
+          actors: ["Bob (Eng)", "LLM", "Tool Call", "App RBAC"],
+          steps: [
+            { from: 0, to: 1, label: '"Finance budget?" (hits LLM!)', color: "#f87171" },
+            { from: 1, to: 2, label: "search_docs(all spaces)", color: "#f87171" },
+            { from: 2, to: 3, label: "post-filter RBAC check ⚠", color: "#facc15" },
+            { from: 3, to: 2, label: "stale cache / partial leak ✕", color: "#f87171", dashed: true },
+            { from: 2, to: 1, label: "$4.2M Finance doc leaks ✕", color: "#f87171", dashed: true },
+          ],
+        },
+        conv: {
+          actors: ["Bob (Eng)", "Gateway", "OpenFGA", "Memory", "LLM"],
+          steps: [
+            { from: 0, to: 1, label: '"Finance budget?"', color: "#14b8a6" },
+            { from: 1, to: 2, label: "ListObjects(bob, viewer)", color: "#14b8a6" },
+            { from: 2, to: 1, label: "[eng docs only]", color: "#22c55e", dashed: true },
+            { from: 1, to: 3, label: "WHERE doc_id = ANY(allowed)", color: "#14b8a6" },
+            { from: 3, to: 4, label: "0 Finance docs → Zero Leak ✓", color: "#22c55e" },
+          ],
+        },
+        why: "Traditional agent stacks hit the LLM and tools before checking RBAC. Convergent enforces OpenFGA before Top-K retrieval — and revoking Bob drops access to 0 docs instantly.",
       },
       4: {
-        trad: [
-          { t: "Request (Carol)", s: "Finance" },
-          { t: "Stateless Proxy", s: "No scoped KV" },
-          { t: "Cold Prefill", s: "Recomputes all tokens", cls: "hit-risk" },
-          { t: "Shared Prefix", s: "Side-channel risk", cls: "hit-risk" },
-        ],
-        conv: [
-          { t: "Request (Carol)", s: "Finance" },
-          { t: "HMAC-SHA256", s: "space + model + hash", cls: "hit-purple" },
-          { t: "Smart Cache HIT", s: "⚡ Skips cold prefill", cls: "hit-green" },
-          { t: "Fast Decode", s: "0 cross-scope leak", cls: "hit-teal" },
-        ],
-        packetCls: "cache",
-        why: "Traditional proxies either suffer cold prefill on every turn or share prefix caches across tenants. Convergent hashes KV keys per clearance scope: Carol hits warm KV while Bob's identical text stays isolated.",
+        trad: {
+          actors: ["Carol", "Proxy", "Shared KV", "GPU Prefill"],
+          steps: [
+            { from: 0, to: 1, label: "POST /chat (Finance)", color: "#94a3b8" },
+            { from: 1, to: 2, label: "lookup(raw prefix) ⚠", color: "#f87171" },
+            { from: 2, to: 1, label: "MISS or cross-tenant leak ✕", color: "#f87171", dashed: true },
+            { from: 1, to: 3, label: "full cold prefill (slow)", color: "#f87171" },
+            { from: 3, to: 0, label: "high TTFT latency ✕", color: "#f87171", dashed: true },
+          ],
+        },
+        conv: {
+          actors: ["Carol", "Gateway", "Smart Cache", "GPU Decode"],
+          steps: [
+            { from: 0, to: 1, label: "POST /chat (Finance)", color: "#14b8a6" },
+            { from: 1, to: 1, label: "HMAC(space, model, hash)", color: "#a855f7" },
+            { from: 1, to: 2, label: "GET cvg:kv:v1:476b...", color: "#a855f7" },
+            { from: 2, to: 3, label: "⚡ WARM KV HIT (skip prefill)", color: "#22c55e" },
+            { from: 3, to: 0, label: "fast decode · Bob disjoint ✓", color: "#22c55e", dashed: true },
+          ],
+        },
+        why: "Traditional proxies recompute cold prefill or risk cross-tenant prefix timing leaks. Convergent routes requests through per-clearance HMAC KV keys: Carol hits warm KV while Bob stays isolated.",
       },
       5: {
-        trad: [
-          { t: "Spawn 2 Agents", s: "Parallel tasks" },
-          { t: "Copy-Heavy Branch", s: "Clones 2×N rows", cls: "hit-risk" },
-          { t: "Cache Thrash", s: "Fragmented KV keys", cls: "hit-risk" },
-          { t: "Manual Merge", s: "Conflicts & stale" },
-        ],
-        conv: [
-          { t: "Spawn 2 Agents", s: "Parallel tasks" },
-          { t: "0-Byte Overlays", s: "Shared Base KV", cls: "hit-purple" },
-          { t: "Auto-Rebase Land", s: "r3, r4 · C=CONFLICT", cls: "hit-teal" },
-          { t: "Instant Undo", s: "Atomic rollback", cls: "hit-green" },
-        ],
-        packetCls: "overlay",
-        why: "Traditional Git-style branches copy state and fragment KV caches at agent scale. Convergent spawns 0-byte Overlays sharing 100% of base KV, auto-rebases non-overlapping lands, and rolls back atomically.",
+        trad: {
+          actors: ["Agents A/B", "Git Branch", "Storage", "KV Cache"],
+          steps: [
+            { from: 0, to: 1, label: "spawn 2 agent branches", color: "#94a3b8" },
+            { from: 1, to: 2, label: "COPY 2×N rows ⚠", color: "#f87171" },
+            { from: 1, to: 3, label: "2× fragmented KV keys ✕", color: "#f87171" },
+            { from: 0, to: 1, label: "merge B into main", color: "#f87171" },
+            { from: 1, to: 0, label: "stale branch / conflict ✕", color: "#f87171", dashed: true },
+          ],
+        },
+        conv: {
+          actors: ["Agents A/B/C", "Gateway", "Postgres MVCC", "Valkey"],
+          steps: [
+            { from: 0, to: 2, label: "open_overlay (0 copies) ✓", color: "#a855f7" },
+            { from: 0, to: 2, label: "A lands r3 · B auto-rebases r4", color: "#14b8a6" },
+            { from: 0, to: 2, label: "stale C → ✕ CONFLICT guard", color: "#facc15" },
+            { from: 1, to: 2, label: "undo(r3) → r5 atomic", color: "#22c55e" },
+            { from: 2, to: 3, label: "DEL stale KV · Base shared ✓", color: "#22c55e" },
+          ],
+        },
+        why: "Traditional Git-style branches copy state and thrash KV caches at agent scale. Convergent uses 0-byte Overlays sharing 100% of base KV, auto-rebases concurrent lands, and undoes atomically.",
       },
     };
 
     let activeTimer = null;
 
+    function renderSeqSvg(spec, uid, isConv) {
+      const n = spec.actors.length;
+      const W = 540;
+      const padX = 56;
+      const stepY = 44;
+      const topY = 42;
+      const H = topY + spec.steps.length * stepY + 22;
+      const xs = spec.actors.map((_, i) => (n === 1 ? W / 2 : padX + (i * (W - padX * 2)) / (n - 1)));
+      const totalDur = (spec.steps.length * 0.9 + 1.2).toFixed(2);
+      const accent = isConv ? "#14b8a6" : "#f87171";
+
+      const actorsSvg = spec.actors.map((name, i) => {
+        const x = xs[i];
+        return `
+          <line x1="${x}" y1="${topY}" x2="${x}" y2="${H - 10}" stroke="rgba(148,163,184,0.22)" stroke-width="1.2" stroke-dasharray="4 4" />
+          <rect x="${x - 46}" y="8" width="92" height="26" rx="6" fill="#0f172a" stroke="${isConv ? "rgba(20,184,166,0.45)" : "rgba(248,113,113,0.40)"}" stroke-width="1" />
+          <text x="${x}" y="25" text-anchor="middle" fill="#e2e8f0" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="10.5" font-weight="700">${name}</text>`;
+      }).join("");
+
+      const stepsSvg = spec.steps.map((s, idx) => {
+        const y = topY + 26 + idx * stepY;
+        const x1 = xs[s.from];
+        const x2 = xs[s.to];
+        const pid = `${uid}_p${idx}`;
+        const delay = (idx * 0.85).toFixed(2);
+        const dash = s.dashed ? 'stroke-dasharray="5 3"' : "";
+        let pathD, labelX, labelY;
+
+        if (s.from === s.to) {
+          // Self-call loop on same lifeline
+          pathD = `M ${x1} ${y - 6} C ${x1 + 42} ${y - 6}, ${x1 + 42} ${y + 14}, ${x1} ${y + 14}`;
+          labelX = x1 + 48;
+          labelY = y + 6;
+        } else {
+          const dir = x2 > x1 ? 1 : -1;
+          pathD = `M ${x1} ${y} L ${x2 - dir * 6} ${y}`;
+          labelX = (x1 + x2) / 2;
+          labelY = y - 8;
+        }
+
+        const arrowHead = s.from === s.to
+          ? `<polygon points="${x1},${y + 14} ${x1 + 7},${y + 10} ${x1 + 7},${y + 18}" fill="${s.color}" />`
+          : (x2 > x1
+            ? `<polygon points="${x2},${y} ${x2 - 8},${y - 4} ${x2 - 8},${y + 4}" fill="${s.color}" />`
+            : `<polygon points="${x2},${y} ${x2 + 8},${y - 4} ${x2 + 8},${y + 4}" fill="${s.color}" />`);
+
+        const textAnchor = s.from === s.to ? "start" : "middle";
+        return `
+          <rect x="${x2 - 3}" y="${y - 8}" width="6" height="16" rx="2" fill="${s.color}" opacity="0.28" />
+          <path id="${pid}" d="${pathD}" fill="none" stroke="${s.color}" stroke-width="1.8" ${dash} opacity="0.88" />
+          ${arrowHead}
+          <text x="${labelX}" y="${labelY}" text-anchor="${textAnchor}" fill="${s.color}" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="10.2" font-weight="600">${s.label}</text>
+          <circle r="4" fill="${s.color}" filter="url(#glow_${uid})">
+            <animateMotion dur="0.85s" begin="${delay}s;${uid}_loop.end+${delay}s" fill="freeze" keyPoints="0;1" keyTimes="0;1" calcMode="linear">
+              <mpath href="#${pid}" />
+            </animateMotion>
+            <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.1;0.9;1" dur="0.85s" begin="${delay}s;${uid}_loop.end+${delay}s" />
+          </circle>`;
+      }).join("");
+
+      return `
+        <svg class="seq-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="glow_${uid}" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2.5" result="b" />
+              <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+          </defs>
+          <rect width="1" height="1" opacity="0">
+            <animate id="${uid}_loop" attributeName="opacity" from="0" to="0" dur="${totalDur}s" begin="0s;${uid}_loop.end" />
+          </rect>
+          ${actorsSvg}
+          ${stepsSvg}
+        </svg>`;
+    }
+
     function renderDualArch(idx) {
       const f = STAGE_FLOWS[idx];
       if (!f) return "";
-      const buildTrack = (nodes, pCls) => nodes.map((n, k) => `
-        <div class="anode ${n.cls || ""}">
-          <span>${n.t}</span>
-          <small>${n.s}</small>
-        </div>
-        ${k < nodes.length - 1 ? `<div class="alink"><div class="packet ${pCls}" style="animation-delay:${(k * 0.35).toFixed(2)}s"></div></div>` : ""}
-      `).join("");
-
+      const salt = Math.random().toString(36).slice(2, 6);
       return `
-        <div class="arch-dual anim-in">
-          <div class="arch-track">
-            <span class="track-label trad">✕ Traditional</span>
-            <div class="track-nodes">${buildTrack(f.trad, "trad")}</div>
-          </div>
-          <div class="arch-track">
-            <span class="track-label conv">✓ Convergent</span>
-            <div class="track-nodes">${buildTrack(f.conv, f.packetCls)}</div>
+        <div class="anim-in" style="display:flex; flex-direction:column; gap:10px;">
+          <div class="seq-dual">
+            <div class="seq-box trad">
+              <div class="between">
+                <span class="eyebrow risk">✕ Part 1 · Traditional Architecture</span>
+                <span class="badge risk">Sequential / Leaky</span>
+              </div>
+              ${renderSeqSvg(f.trad, `s${idx}t_${salt}`, false)}
+            </div>
+            <div class="seq-box conv">
+              <div class="between">
+                <span class="eyebrow">✓ Part 2 · Project Convergent</span>
+                <span class="badge teal">Pre-Filtered / Cached</span>
+              </div>
+              ${renderSeqSvg(f.conv, `s${idx}c_${salt}`, true)}
+            </div>
           </div>
           <div class="arch-why"><strong>Why Convergent wins:</strong> <span>${f.why}</span></div>
         </div>`;
